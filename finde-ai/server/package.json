@@ -8,7 +8,10 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "health": "curl http://localhost:8080/api/health"
+    "health": "curl http://localhost:8080/api/health",
+    "search:demo": "curl http://localhost:8080/api/search/demo",
+    "search:internship": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"remote frontend internship for CSE students\",\"sourceMode\":\"all\",\"limit\":5}'",
+    "search:research": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"AI cybersecurity research idea for beginner\",\"sourceMode\":\"all\",\"limit\":5}'"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",

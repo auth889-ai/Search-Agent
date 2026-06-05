@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import { Client } from "@elastic/elasticsearch";
+import searchRoutes from "./routes/search.routes.js";
 
 dotenv.config({ path: "../.env" });
 dotenv.config({ path: "../.env.example" });
@@ -46,7 +47,7 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => {
@@ -58,7 +59,9 @@ app.get("/", (_req, res) => {
     docs: {
       health: "/api/health",
       safety: "/api/safety",
-      elastic: "/api/elastic/health"
+      elastic: "/api/elastic/health",
+      search: "/api/search",
+      demoSearch: "/api/search/demo"
     }
   });
 });
@@ -73,6 +76,14 @@ app.get("/api/health", (_req, res) => {
       communityPosts: COMMUNITY_POSTS_INDEX,
       webSources: WEB_SOURCES_INDEX,
       userKnowledge: USER_KNOWLEDGE_INDEX
+    },
+    capabilities: {
+      elasticsearchSearch: true,
+      googleWebSearch: Boolean(process.env.GOOGLE_CSE_API_KEY),
+      elasticMcpEnabled: process.env.ELASTIC_MCP_ENABLED === "true",
+      geminiConfigured: Boolean(
+        process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+      )
     },
     safety: {
       visiblePostIndexingOnly: safetyPolicy.allowVisiblePostIndexingOnly,
@@ -115,6 +126,8 @@ app.get("/api/elastic/health", async (_req, res) => {
   }
 });
 
+app.use("/api", searchRoutes);
+
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -126,4 +139,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`FindE AI backend running on http://localhost:${PORT}`);
   console.log(`Elasticsearch node: ${ELASTICSEARCH_NODE}`);
+  console.log(`Search endpoint: http://localhost:${PORT}/api/search`);
 });
