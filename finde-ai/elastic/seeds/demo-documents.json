@@ -1,0 +1,200 @@
+{
+  "communityPosts": [
+    {
+      "docId": "community_internship_001",
+      "sourceType": "facebook_group",
+      "platform": "facebook",
+      "groupName": "CSE Internship Bangladesh",
+      "title": "Remote frontend internship for CSE students",
+      "text": "We are hiring remote frontend interns. Skills: React, JavaScript, basic REST API. CSE students can apply. Deadline June 15. Paid internship.",
+      "comments": [
+        "I applied last month. They asked React hooks and one small API task.",
+        "This is good for beginners if you know HTML CSS JavaScript."
+      ],
+      "url": "https://facebook.com/groups/demo/posts/internship-001",
+      "date": "2026-06-01",
+      "authorDisplay": "Community Member",
+      "topics": ["internship", "cse", "remote", "frontend", "react"],
+      "tags": ["paid", "deadline", "beginner-friendly"],
+      "location": "Bangladesh",
+      "deadline": "2026-06-15",
+      "visibleCaptureOnly": true,
+      "trustSignals": {
+        "sourceOfficial": false,
+        "hasOfficialLink": false,
+        "hasDeadline": true,
+        "commentCount": 2,
+        "reactionCount": 41,
+        "freshnessScore": 0.95,
+        "trustScore": 0.74
+      }
+    },
+    {
+      "docId": "community_research_001",
+      "sourceType": "facebook_group",
+      "platform": "facebook",
+      "groupName": "AI Research Students BD",
+      "title": "Beginner AI cybersecurity research idea",
+      "text": "For final year project, try ML based intrusion detection. Start with NSL-KDD or CICIDS dataset. Compare Random Forest, SVM, and simple neural network. Focus on explainability and false positive reduction.",
+      "comments": [
+        "Good beginner topic. Add SHAP explanation to make it stronger.",
+        "Dataset cleaning and feature selection are important."
+      ],
+      "url": "https://facebook.com/groups/demo/posts/research-001",
+      "date": "2026-05-28",
+      "authorDisplay": "Research Mentor",
+      "topics": ["research", "ai", "cybersecurity", "machine-learning", "intrusion-detection"],
+      "tags": ["beginner", "final-year-project", "dataset"],
+      "location": "Bangladesh",
+      "deadline": null,
+      "visibleCaptureOnly": true,
+      "trustSignals": {
+        "sourceOfficial": false,
+        "hasOfficialLink": false,
+        "hasDeadline": false,
+        "commentCount": 2,
+        "reactionCount": 68,
+        "freshnessScore": 0.88,
+        "trustScore": 0.81
+      }
+    },
+    {
+      "docId": "community_scholarship_001",
+      "sourceType": "facebook_group",
+      "platform": "facebook",
+      "groupName": "Scholarship Updates BD",
+      "title": "Masters scholarship official application reminder",
+      "text": "Reminder: check official university pages before applying. Some scholarship posts are fake. Always verify deadline, eligibility, and required documents from official website.",
+      "comments": [
+        "Yes, many fake agents post scholarship ads.",
+        "Official page is safer than random Google form."
+      ],
+      "url": "https://facebook.com/groups/demo/posts/scholarship-001",
+      "date": "2026-06-02",
+      "authorDisplay": "Scholarship Helper",
+      "topics": ["scholarship", "masters", "official-source", "deadline"],
+      "tags": ["warning", "verify", "official"],
+      "location": "global",
+      "deadline": null,
+      "visibleCaptureOnly": true,
+      "trustSignals": {
+        "sourceOfficial": false,
+        "hasOfficialLink": false,
+        "hasDeadline": false,
+        "commentCount": 2,
+        "reactionCount": 52,
+        "freshnessScore": 0.97,
+        "trustScore": 0.79
+      }
+    },
+    {
+      "docId": "community_coding_001",
+      "sourceType": "facebook_group",
+      "platform": "facebook",
+      "groupName": "JavaScript Developers Bangladesh",
+      "title": "MongoDB Atlas connection error solution",
+      "text": "If MongoDB Atlas connection fails, check IP whitelist, connection string password encoding, database user permission, and network access. For Node.js, use dotenv and never hardcode the URI.",
+      "comments": [
+        "My issue was IP whitelist 0.0.0.0/0 for testing.",
+        "Password had @ symbol and needed URL encoding."
+      ],
+      "url": "https://facebook.com/groups/demo/posts/coding-001",
+      "date": "2026-05-30",
+      "authorDisplay": "Node Helper",
+      "topics": ["coding-error", "mongodb", "atlas", "nodejs", "dotenv"],
+      "tags": ["debugging", "backend", "database"],
+      "location": "global",
+      "deadline": null,
+      "visibleCaptureOnly": true,
+      "trustSignals": {
+        "sourceOfficial": false,
+        "hasOfficialLink": false,
+        "hasDeadline": false,
+        "commentCount": 2,
+        "reactionCount": 31,
+        "freshnessScore": 0.9,
+        "trustScore": 0.76
+      }
+    }
+  ],
+  "webSources": [
+    {
+      "docId": "web_internship_001",
+      "sourceType": "official_web",
+      "siteName": "Demo Company Careers",
+      "domain": "careers.demo-company.example",
+      "displayLink": "careers.demo-company.example",
+      "title": "Software Engineering Intern Application",
+      "text": "Official application page for Software Engineering Internship. Requirements include JavaScript, React, REST APIs, Git, and basic problem solving. Remote applicants may apply.",
+      "snippet": "Official internship application page with requirements, deadline, and application form.",
+      "url": "https://careers.demo-company.example/software-engineering-intern",
+      "date": "2026-06-03",
+      "topics": ["internship", "software", "react", "remote"],
+      "tags": ["official", "application", "career"],
+      "location": "remote",
+      "deadline": "2026-06-20",
+      "sourceRank": 1,
+      "trustSignals": {
+        "sourceOfficial": true,
+        "hasOfficialLink": true,
+        "hasDeadline": true,
+        "commentCount": 0,
+        "reactionCount": 0,
+        "freshnessScore": 0.99,
+        "trustScore": 0.94
+      }
+    },
+    {
+      "docId": "web_research_001",
+      "sourceType": "trusted_web",
+      "siteName": "Cybersecurity Dataset Guide",
+      "domain": "research-datasets.example",
+      "displayLink": "research-datasets.example",
+      "title": "Intrusion Detection Dataset Guide for Beginners",
+      "text": "A beginner guide to intrusion detection datasets including NSL-KDD, CICIDS, preprocessing, feature selection, model comparison, evaluation metrics, precision, recall, F1 score, and false positive analysis.",
+      "snippet": "Guide for ML-based intrusion detection research projects and datasets.",
+      "url": "https://research-datasets.example/intrusion-detection-beginner-guide",
+      "date": "2026-05-25",
+      "topics": ["research", "ai", "cybersecurity", "dataset", "intrusion-detection"],
+      "tags": ["guide", "beginner", "machine-learning"],
+      "location": "global",
+      "deadline": null,
+      "sourceRank": 1,
+      "trustSignals": {
+        "sourceOfficial": false,
+        "hasOfficialLink": true,
+        "hasDeadline": false,
+        "commentCount": 0,
+        "reactionCount": 0,
+        "freshnessScore": 0.84,
+        "trustScore": 0.86
+      }
+    },
+    {
+      "docId": "web_scholarship_001",
+      "sourceType": "official_web",
+      "siteName": "Demo University Scholarships",
+      "domain": "scholarships.demo-university.example",
+      "displayLink": "scholarships.demo-university.example",
+      "title": "International Masters Scholarship",
+      "text": "Official scholarship page for international masters applicants. Includes eligibility, required documents, English language requirements, funding amount, and deadline.",
+      "snippet": "Official scholarship page with eligibility, documents, and deadline.",
+      "url": "https://scholarships.demo-university.example/masters",
+      "date": "2026-06-01",
+      "topics": ["scholarship", "masters", "official-source", "international"],
+      "tags": ["official", "deadline", "documents"],
+      "location": "global",
+      "deadline": "2026-07-01",
+      "sourceRank": 1,
+      "trustSignals": {
+        "sourceOfficial": true,
+        "hasOfficialLink": true,
+        "hasDeadline": true,
+        "commentCount": 0,
+        "reactionCount": 0,
+        "freshnessScore": 0.95,
+        "trustScore": 0.96
+      }
+    }
+  ]
+}

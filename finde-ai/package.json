@@ -1,0 +1,30 @@
+{
+  "name": "finde-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FindE AI - AI Community + Web Search Agent using Chrome Extension, Elasticsearch, Elastic MCP, and Gemini.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "install:all": "npm install && npm --prefix server install && npm --prefix web install",
+    "elastic:up": "docker compose up -d elasticsearch kibana",
+    "elastic:down": "docker compose down",
+    "elastic:logs": "docker compose logs -f elasticsearch",
+    "health": "curl http://localhost:8080/api/health",
+    "seed": "npm --prefix elastic run seed",
+    "create-indices": "npm --prefix elastic run create-indices"
+  },
+  "workspaces": [
+    "server",
+    "web",
+    "elastic"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

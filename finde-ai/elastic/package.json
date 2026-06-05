@@ -1,0 +1,15 @@
+{
+  "name": "finde-ai-elastic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Elasticsearch setup and seed scripts for FindE AI.",
+  "type": "module",
+  "scripts": {
+    "create-indices": "node scripts/create-indices.js",
+    "seed": "node scripts/seed-demo-data.js"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.15.0",
+    "dotenv": "^16.4.7"
+  }
+}

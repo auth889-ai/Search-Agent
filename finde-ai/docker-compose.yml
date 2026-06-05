@@ -1,0 +1,46 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: finde-ai-elasticsearch
+    environment:
+      - node.name=finde-ai-es-node
+      - cluster.name=finde-ai-local-cluster
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "9200:9200"
+    volumes:
+      - finde_ai_es_data:/usr/share/elasticsearch/data
+    networks:
+      - finde-ai-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s http://localhost:9200/_cluster/health | grep -E 'green|yellow'"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    container_name: finde-ai-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - finde-ai-net
+
+volumes:
+  finde_ai_es_data:
+
+networks:
+  finde-ai-net:
+    driver: bridge

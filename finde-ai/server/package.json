@@ -1,0 +1,21 @@
+{
+  "name": "finde-ai-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FindE AI backend API for community + web search agent.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "health": "curl http://localhost:8080/api/health"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.15.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0"
+  }
+}

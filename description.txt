@@ -1,0 +1,881 @@
+Findr AI
+AI Community + Web Search Agent
+
+এটা হবে এমন এক agent যেটা মানুষকে Facebook group/community post + Google/web trusted source থেকে accurate useful information খুঁজে দিবে। শুধু search result list না; agent বুঝবে user আসলে কী চায়, source খুঁজবে, evidence verify করবে, rank করবে, তারপর answer দিবে।
+
+Hackathon-এর জন্য এটা fit কারণ challenge চায় agent যেন শুধু answer না দেয়, real tool দিয়ে কাজ করে; Google Cloud Agent Builder/Gemini + partner MCP integration লাগে; আর judging criteria-তে technological implementation, design, impact, idea quality আছে।
+
+1. Project problem
+
+Facebook group/community group-এ অনেক useful post থাকে:
+
+internship
+research idea
+job circular
+scholarship
+admission
+visa experience
+rent/roommate
+coding error solution
+course/resource suggestion
+
+কিন্তু problem:
+
+Facebook search weak
+keyword না মিললে post পাওয়া যায় না
+comments-এর ভিতরের answer miss হয়
+old useful post হারিয়ে যায়
+same question বারবার হয়
+Google search community context বুঝে না
+user official source আর random post আলাদা করতে পারে না
+
+So তোমার project solve করবে:
+
+“আমি যা চাই, সেই intent বুঝে old group/community post + trusted web source থেকে accurate answer খুঁজে দাও, evidence সহ।”
+
+2. One-line Devpost pitch
+
+Findr AI is an Elastic MCP-powered Gemini search agent that turns noisy Facebook/community posts and trusted web sources into accurate, evidence-grounded answers for internships, research ideas, jobs, scholarships, coding help, and local student needs.
+
+3. Full system flow
+User asks question
+        ↓
+Chrome Extension / Web App
+        ↓
+Intent Planner Agent
+        ↓
+Source Router Agent
+        ↓
+Data Sources:
+  - user-approved visible Facebook/community posts
+  - Google/web trusted sources
+  - saved links/PDF/CSV/bookmarks
+        ↓
+Ingestion Pipeline:
+  - collect
+  - clean
+  - normalize
+  - deduplicate
+  - tag
+  - embed
+  - extract trust signals
+        ↓
+Elasticsearch:
+  - community posts index
+  - web sources index
+  - user saved knowledge index
+        ↓
+Elastic MCP Server:
+  - agent tool access to Elasticsearch
+        ↓
+Gemini / Google Agent Builder:
+  - plan
+  - search
+  - rerank
+  - verify evidence
+  - compose answer
+        ↓
+Final UI:
+  - best posts
+  - best web sources
+  - matched snippet
+  - date
+  - why relevant
+  - confidence score
+  - next action
+4. Main tools and why each is powerful
+A. Chrome Extension
+
+This is the user’s entry point.
+
+It will do:
+
+Index visible posts
+Search indexed group memory
+Show result cards
+Save useful result
+Detect duplicate question
+
+Important safe rule:
+
+No hidden scraping
+No auto-scroll
+No login bypass
+No private data stealing
+Only user-approved visible post indexing
+
+Why powerful:
+
+User does not need to copy-paste posts manually.
+Extension turns real community pages into searchable memory.
+B. Web App Dashboard
+
+The dashboard is for full search experience.
+
+Features:
+
+Ask natural question
+Choose source: Community / Web / Both
+Filter by topic/date/location/source
+View ranked results
+Save result
+Export result
+Ask follow-up
+
+Example UI:
+
+Question:
+"I need remote internship for CSE student"
+
+Source:
+[✓] Community posts
+[✓] Official web
+[✓] Saved links
+
+Result:
+Best community post
+Best official source
+AI summary
+Confidence score
+Next action
+C. Node.js / Express Backend
+
+Backend connects everything.
+
+APIs:
+
+GET  /api/health
+POST /api/posts/index
+POST /api/search
+POST /api/web/search
+POST /api/agent/ask
+POST /api/sources/save
+
+Backend tasks:
+
+receive posts from extension
+clean noisy text
+remove duplicate
+detect topic
+create embeddings
+send data to Elasticsearch
+call Google Custom Search API
+call Gemini/Agent endpoint
+return final answer to UI
+D. Elasticsearch
+
+Elastic is the core search engine.
+
+It stores:
+
+Facebook/community posts
+comments
+web pages
+official links
+saved resources
+PDF/CSV/bookmarks
+
+It searches using:
+
+keyword search
+semantic/vector search
+metadata filter
+hybrid ranking
+freshness boost
+source trust score
+duplicate removal
+
+Why Elastic makes it strong:
+
+Normal search = word match
+Elastic hybrid search = word + meaning + filters + ranking
+
+Example:
+
+User asks:
+
+"AI cybersecurity research idea"
+
+Post says:
+
+"ML-based intrusion detection project"
+
+Keyword search may miss it. Semantic/vector search can match the meaning.
+
+E. Elastic MCP Server
+
+This is the hackathon partner superpower.
+
+Instead of Gemini directly calling your backend only, Gemini will use Elastic MCP tools.
+
+Flow:
+
+Gemini Agent
+→ calls Elastic MCP tool
+→ Elastic MCP queries Elasticsearch
+→ returns ranked evidence
+→ Gemini verifies and explains
+
+This matters because hackathon requires meaningful partner MCP integration. The challenge text says you must build an agent with Gemini/Google Cloud Agent Builder and integrate a partner MCP server.
+
+F. Gemini / Google Agent Builder
+
+Gemini is not just answering. It is planning.
+
+Gemini agent does:
+
+understand user intent
+decide sources
+call Elastic MCP
+call web search
+compare evidence
+remove weak result
+write final answer
+suggest next action
+
+Agent Builder is useful because the hackathon asks for an agent that can reason, plan, and execute tasks under user oversight, not just a chatbot.
+
+G. Google Custom Search / Web Search Connector
+
+This makes your project not only Facebook search.
+
+It finds trusted web sources:
+
+official company career pages
+university notices
+scholarship pages
+official docs
+GitHub issues
+StackOverflow/docs for coding help
+research websites
+
+Example:
+
+User asks:
+
+"BRAC internship for CSE"
+
+Agent searches:
+
+community posts
+company career page
+official deadline page
+saved previous links
+
+Final answer combines both:
+
+Community says people applied here.
+Official page confirms application link.
+H. Evidence Verifier Agent
+
+This is what makes answer accurate.
+
+It checks:
+
+Is result actually about user query?
+Is it recent?
+Is it official or random?
+Does snippet prove the answer?
+Is source duplicate?
+Is the deadline expired?
+Is the post only discussion or real opportunity?
+
+Output:
+
+Confidence: 91%
+Reason: mentions CSE internship, Dhaka, application deadline, official link
+I. Trust Score Engine
+
+Each result gets score.
+
+Example formula:
+
+Final Score =
+semantic relevance
++ keyword match
++ freshness
++ official source boost
++ useful comment signal
++ deadline detected
+- duplicate penalty
+- outdated post penalty
+- vague post penalty
+
+For internship:
+
+official source + recent + deadline + apply link = high score
+old vague post = low score
+
+For research idea:
+
+clear idea + methodology + paper/source link = high score
+random one-line comment = low score
+5. Agent team design
+1. IntentPlannerAgent
+
+Understands what user wants.
+
+Input:
+
+"I need AI research idea for beginner"
+
+Output:
+
+{
+  "intent": "research_idea",
+  "topic": "AI cybersecurity",
+  "level": "beginner",
+  "sourcesNeeded": ["community_posts", "web_sources", "saved_resources"]
+}
+2. SourceRouterAgent
+
+Decides where to search.
+
+Example:
+
+internship → community posts + company career sites
+research idea → community posts + papers/blogs/web
+coding error → community posts + docs/GitHub/StackOverflow
+scholarship → community posts + official scholarship websites
+rent → community posts mostly
+3. IngestionAgent
+
+Turns messy data into clean searchable data.
+
+Tasks:
+
+extract post text
+extract comments
+extract date/link/group
+remove emojis/noise
+detect language
+normalize Bangla/English mixed text
+split long text into chunks
+4. TaggingAgent
+
+Adds useful tags.
+
+Tags:
+
+internship
+remote
+onsite
+research
+AI
+cybersecurity
+scholarship
+deadline
+job
+rent
+coding_error
+official_source
+community_discussion
+5. ElasticRetrievalAgent
+
+Uses Elastic MCP to search.
+
+Search types:
+
+keyword
+semantic/vector
+hybrid
+filtered by date/source/topic
+6. WebSearchAgent
+
+Searches Google/web trusted sources.
+
+Tasks:
+
+find official links
+find fresh source
+find docs
+find career/scholarship pages
+cache result in Elastic
+7. EvidenceVerifierAgent
+
+Checks result quality.
+
+Rejects:
+
+old expired post
+wrong topic
+no proof
+random unrelated comment
+duplicate result
+low-trust source
+8. AnswerComposerAgent
+
+Creates final answer.
+
+Format:
+
+Best result
+Why it matches
+Source
+Date
+Snippet
+Confidence
+Next action
+9. ActionAgent
+
+Helps user take next step.
+
+Examples:
+
+Open application page
+Save post
+Create shortlist
+Draft message to post author
+Set reminder for deadline
+Compare opportunities
+6. Data model
+
+Each post/source should be saved like this:
+
+{
+  "docId": "community_001",
+  "sourceType": "facebook_group",
+  "groupName": "CSE Internship Bangladesh",
+  "title": "Remote internship for CSE students",
+  "text": "We are hiring remote software interns...",
+  "comments": [
+    "Applied last week, they ask React and Node.",
+    "Deadline is June 15."
+  ],
+  "url": "https://facebook.com/groups/...",
+  "date": "2026-06-01",
+  "authorDisplay": "optional_or_masked",
+  "topics": ["internship", "cse", "remote"],
+  "location": "Bangladesh",
+  "deadline": "2026-06-15",
+  "trustSignals": {
+    "hasOfficialLink": true,
+    "commentCount": 14,
+    "reactionCount": 38,
+    "sourceOfficial": false
+  },
+  "embedding": [0.01, 0.02]
+}
+
+For web source:
+
+{
+  "docId": "web_001",
+  "sourceType": "official_web",
+  "siteName": "Company Career Page",
+  "title": "Software Engineering Intern",
+  "text": "Official internship application page...",
+  "url": "https://company.com/careers/intern",
+  "date": "2026-06-03",
+  "topics": ["internship", "software", "career"],
+  "trustSignals": {
+    "sourceOfficial": true,
+    "hasDeadline": true
+  }
+}
+7. Index structure
+
+Use three Elasticsearch indices:
+
+community_posts_index
+web_sources_index
+user_knowledge_index
+community_posts_index
+
+Stores:
+
+FB/community visible posts
+comments
+group name
+post link
+date
+tags
+trust signal
+embedding
+web_sources_index
+
+Stores:
+
+official websites
+Google search result snippets
+docs
+career pages
+scholarship pages
+research resource pages
+user_knowledge_index
+
+Stores:
+
+saved posts
+bookmarks
+PDFs
+CSV
+manual notes
+8. User journey from start to end
+Step 1 — User installs Chrome Extension
+
+User sees:
+
+Findr AI
+[ Index visible posts ]
+[ Ask question ]
+Step 2 — User opens a Facebook/community group
+
+Example group contains posts about internships, jobs, research ideas.
+
+User clicks:
+
+Index visible posts
+
+Extension collects only visible text and links.
+
+Step 3 — Backend cleans data
+
+Backend removes noise:
+
+See more
+Like
+Comment
+Share
+emoji-only lines
+duplicate text
+
+Then extracts:
+
+topic
+date
+source link
+comments
+deadline
+location
+skills
+Step 4 — Data goes to Elasticsearch
+
+Elastic stores it for fast accurate search.
+
+Step 5 — User asks question
+"I need beginner AI cybersecurity research idea"
+Step 6 — Gemini plans search
+
+Gemini decides:
+
+intent = research idea
+sources = community posts + web sources
+filters = beginner + AI + cybersecurity
+Step 7 — Elastic MCP search
+
+Gemini calls Elastic MCP:
+
+search community_posts_index
+search web_sources_index
+hybrid query
+rerank results
+Step 8 — Web source search
+
+If not enough evidence:
+
+Google/web connector finds official or trusted sources
+caches them in Elastic
+Step 9 — Evidence verifier checks
+
+It removes:
+
+irrelevant posts
+expired posts
+weak comments
+duplicate results
+Step 10 — Final result shown
+Best Community Post:
+"ML intrusion detection idea for final year"
+Date: May 28, 2026
+Why relevant: beginner-friendly AI cybersecurity idea
+Snippet: "Use NSL-KDD dataset..."
+Confidence: 89%
+
+Best Web Source:
+"Intrusion Detection Dataset Guide"
+Why relevant: gives dataset and methodology
+Confidence: 84%
+
+Next Action:
+Save this idea, open dataset link, create project outline.
+9. Folder architecture
+findr-ai/
+  README.md
+  LICENSE
+  .gitignore
+  docker-compose.yml
+  .env.example
+
+  extension/
+    manifest.json
+    popup.html
+    popup.css
+    popup.js
+    content.js
+    background.js
+
+  web/
+    package.json
+    src/
+      App.jsx
+      pages/
+        Dashboard.jsx
+        Results.jsx
+      components/
+        SearchBox.jsx
+        ResultCard.jsx
+        SourceBadge.jsx
+        ConfidenceMeter.jsx
+
+  server/
+    package.json
+    server.js
+    routes/
+      health.routes.js
+      posts.routes.js
+      search.routes.js
+      agent.routes.js
+      web.routes.js
+    services/
+      elastic.service.js
+      ingestion.service.js
+      cleaner.service.js
+      embedding.service.js
+      webSearch.service.js
+      trustScore.service.js
+      dedupe.service.js
+    controllers/
+      posts.controller.js
+      search.controller.js
+      agent.controller.js
+
+  agent/
+    README.md
+    agent.config.json
+    mcp/
+      elastic-mcp.config.json
+    agents/
+      intentPlanner.agent.js
+      sourceRouter.agent.js
+      retrieval.agent.js
+      evidenceVerifier.agent.js
+      answerComposer.agent.js
+      action.agent.js
+    prompts/
+      intentPlanner.prompt.md
+      evidenceVerifier.prompt.md
+      answerComposer.prompt.md
+
+  elastic/
+    mappings/
+      community-posts.mapping.json
+      web-sources.mapping.json
+      user-knowledge.mapping.json
+    seeds/
+      demo-community-posts.json
+      demo-web-sources.json
+    scripts/
+      create-indices.js
+      seed-demo-data.js
+
+  docs/
+    architecture.md
+    safety-policy.md
+    demo-script.md
+    devpost-description.md
+10. Safe Facebook strategy
+
+Do not make it like old scraper projects.
+
+Existing Facebook scraper projects are mostly data collection tools; the uploaded GitHub README says that project scrapes Facebook public pages, supports group parameters, comments, CSV/JSON, and also warns group scraping may miss fields, not work on private groups, and too much scraping can temporarily ban IP.
+
+Your project should say clearly:
+
+We do not mass scrape Facebook.
+We do not bypass login.
+We do not auto-scroll.
+We only index visible content after user clicks the button.
+Demo uses sample data or user-owned/approved data.
+
+This makes your project safer and more professional.
+
+11. Devpost winning angle
+
+Judges will care about:
+
+Technological implementation
+Design
+Potential impact
+Quality of idea
+
+Your uploaded hackathon page lists these judging criteria directly.
+
+So present your project like this:
+
+Technological Implementation
+Chrome Extension
+Node backend
+Elasticsearch hybrid search
+Elastic MCP integration
+Gemini/Agent Builder multi-agent orchestration
+Google/web source connector
+trust ranking
+evidence verification
+Design
+Clean result cards
+confidence meter
+source badges
+matched snippets
+why relevant
+next action
+Impact
+Students find internships faster
+Researchers find ideas faster
+Community groups reduce duplicate posts
+People find verified official sources
+Creativity
+Not a search bar
+Not a scraper
+It is an AI community-memory agent
+12. Build phases from start to ending
+Phase 0 — Project setup
+
+Output:
+
+GitHub repo
+README
+LICENSE
+folder structure
+.env.example
+Phase 1 — Chrome Extension
+
+Output:
+
+popup UI
+Index visible posts
+Ask question box
+content script
+safe extraction only
+Phase 2 — Backend API
+
+Output:
+
+POST /api/posts/index
+POST /api/search
+GET /api/health
+Phase 3 — Elasticsearch
+
+Output:
+
+create indices
+store posts
+keyword search
+filters
+seed demo data
+Phase 4 — Semantic Search
+
+Output:
+
+embedding generation
+vector field
+hybrid search
+semantic meaning match
+Phase 5 — Web Search
+
+Output:
+
+Google/web source connector
+official source finder
+web result caching
+Phase 6 — Elastic MCP
+
+Output:
+
+Elastic MCP config
+agent can query Elastic through MCP
+tool-call proof in demo
+Phase 7 — Gemini Agent
+
+Output:
+
+IntentPlanner
+SourceRouter
+RetrievalAgent
+EvidenceVerifier
+AnswerComposer
+ActionAgent
+Phase 8 — Trust Ranking
+
+Output:
+
+relevance score
+freshness score
+official source boost
+duplicate penalty
+confidence score
+Phase 9 — UI Polish
+
+Output:
+
+result cards
+source badges
+confidence meter
+matched snippets
+next action buttons
+Phase 10 — Demo + Submit
+
+Output:
+
+hosted project URL
+public GitHub repo
+license
+3-minute demo video
+Devpost form
+Elastic track selected
+13. Exact Claude prompt to start
+
+Paste this into Claude Code:
+
+Read this repo first. Do not edit anything yet.
+
+We are building Findr AI:
+An AI Community + Web Search Agent for the Google Cloud Rapid Agent Hackathon.
+
+Goal:
+Help users find accurate useful information from user-approved visible Facebook/community posts plus trusted Google/web sources.
+
+Use cases:
+- internship posts
+- research ideas
+- job circulars
+- scholarships
+- coding error solutions
+- admission/visa/rent/local community info
+
+Architecture:
+Chrome Extension + Web Dashboard + Node backend + Elasticsearch + Elastic MCP + Gemini/Google Agent Builder.
+
+Important:
+Do not build a scraper clone.
+Do not auto-scroll Facebook.
+Do not bypass login.
+Do not collect hidden/private data.
+Only user-approved visible post indexing and demo/sample datasets.
+
+Partner track:
+Elastic. The project must show meaningful Elastic MCP integration.
+
+First response:
+1. Explain current repo structure.
+2. Propose folder plan.
+3. Propose milestones.
+4. Do not write code until I approve.
+14. Final simple meaning
+
+তোমার project simple ভাষায়:
+
+Findr AI হলো এমন agent যেটা Facebook/community group + trusted web source থেকে user-এর দরকার অনুযায়ী accurate old useful post/source খুঁজে দেয়, evidence/snippet/date/confidence সহ।
+
+এটা scraper না।
+এটা AI-powered search + verification + action agent।
