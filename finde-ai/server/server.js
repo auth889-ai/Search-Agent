@@ -147,7 +147,12 @@ app.get("/api/health", async (_req, res) => {
       elasticMcpEnabled: process.env.ELASTIC_MCP_ENABLED === "true",
       geminiConfigured: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-      )
+      ),
+      semanticSearch: true,
+      llmConfigured: Boolean(
+        process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY
+      ),
+      rerankConfigured: Boolean(process.env.COHERE_API_KEY)
     },
     elastic: elasticStatus,
     safety: {
@@ -202,6 +207,9 @@ app.get("/api/elastic/health", async (_req, res) => {
     });
   }
 });
+
+// Serve the web dashboard (same-origin, so no CORS needed) at /app.
+app.use("/app", express.static(path.join(PROJECT_ROOT, "web")));
 
 app.use("/api", searchRoutes);
 app.use("/api", webRoutes);

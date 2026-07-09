@@ -1,0 +1,10 @@
+{
+  "name": "finde-ai-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FindE AI web dashboard (static). Served by the backend at /app.",
+  "scripts": {
+    "dev": "echo 'Open the dashboard at http://localhost:8080/app (served by the backend).'",
+    "serve": "npx --yes serve -l 5173 ."
+  }
+}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>FindE AI — Search Agent</title>
+  </head>
+  <body>
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">✦</span>
+          <div>
+            <div class="brand-name">FindE AI</div>
+            <div class="brand-tag">Search Agent</div>
+          </div>
+        </div>
+
+        <div class="stat-card purple">
+          <div class="stat-label">Insights</div>
+          <div class="stat-big" id="statTotal">0</div>
+          <div class="stat-sub">documents indexed</div>
+        </div>
+
+        <div class="stat-card blue">
+          <div class="stat-label">Sources</div>
+          <div class="stat-row">
+            <span id="statCommunity">0</span> community
+          </div>
+          <div class="stat-row"><span id="statWeb">0</span> web</div>
+          <div class="stat-row"><span id="statSaved">0</span> saved</div>
+        </div>
+
+        <div class="side-heading">Search in</div>
+        <nav class="source-list" id="sourceList">
+          <button class="source-item active" data-source="all">
+            <span class="dot all"></span> All sources
+          </button>
+          <button class="source-item" data-source="community">
+            <span class="dot community"></span> Community posts
+          </button>
+          <button class="source-item" data-source="web">
+            <span class="dot web"></span> Web sources
+          </button>
+          <button class="source-item" data-source="saved">
+            <span class="dot saved"></span> Saved knowledge
+          </button>
+        </nav>
+
+        <div class="side-heading">Capabilities</div>
+        <div class="caps" id="caps">
+          <div class="cap"><span class="cap-dot" id="capSemantic"></span> Semantic search</div>
+          <div class="cap"><span class="cap-dot" id="capLlm"></span> LLM answers</div>
+          <div class="cap"><span class="cap-dot" id="capRerank"></span> Neural rerank</div>
+          <div class="cap"><span class="cap-dot" id="capWeb"></span> Live web</div>
+        </div>
+
+        <div class="side-foot">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">connecting…</span>
+        </div>
+      </aside>
+
+      <!-- MAIN -->
+      <main class="main">
+        <header class="topbar">
+          <h1 id="mainTitle">Search</h1>
+          <div class="search-shell">
+            <span class="search-icon">⌕</span>
+            <input
+              id="queryInput"
+              type="text"
+              placeholder="Ask anything — remote internship for beginners, cybersecurity FYP idea…"
+              autocomplete="off"
+            />
+            <label class="agent-toggle" title="Use the full agent (grounded answer + citations)">
+              <input type="checkbox" id="agentMode" checked />
+              <span>Agent</span>
+            </label>
+            <label class="agent-toggle" title="Fetch fresh web results (needs Tavily key)">
+              <input type="checkbox" id="webMode" />
+              <span>Web</span>
+            </label>
+            <button id="searchBtn" class="go-btn">Search</button>
+          </div>
+        </header>
+
+        <section class="content" id="content">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-mark">✦</div>
+            <h2>Ask your first question</h2>
+            <p>
+              Results are ranked by a <strong>fit score</strong> that blends
+              meaning (semantic embeddings) with keywords. Turn on
+              <strong>Agent</strong> for a grounded answer with citations.
+            </p>
+          </div>
+
+          <!-- Agent answer -->
+          <div class="answer-card hidden" id="answerCard">
+            <div class="answer-head">
+              <div class="answer-ring" id="answerRing"><span id="answerConf">0%</span></div>
+              <div>
+                <div class="answer-kicker" id="answerKicker">Grounded answer</div>
+                <div class="answer-intent" id="answerIntent"></div>
+              </div>
+            </div>
+            <p class="answer-text" id="answerText"></p>
+            <div class="citations" id="citations"></div>
+            <div class="next-actions" id="nextActions"></div>
+            <details class="trace">
+              <summary>Agent reasoning trace</summary>
+              <div class="trace-list" id="traceList"></div>
+            </details>
+          </div>
+
+          <div class="results-head hidden" id="resultsHead">Evidence</div>
+          <div class="results" id="results"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
