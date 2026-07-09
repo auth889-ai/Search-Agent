@@ -14,7 +14,11 @@ import { pipeline, env } from "@xenova/transformers";
 env.allowLocalModels = true;
 env.useBrowserCache = false;
 
-export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
+// Multilingual sentence-transformer (50+ languages incl. Bengali, Arabic, Hindi,
+// Urdu, French...). Lets people search in ANY language and match posts written
+// in another. Local, free, no API key. 384-dim (same ES mapping).
+export const EMBEDDING_MODEL =
+  process.env.EMBEDDING_MODEL || "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
 export const EMBEDDING_DIMS = 384;
 export const MAX_EMBED_CHARS = 4000;
 

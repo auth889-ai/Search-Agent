@@ -11,6 +11,7 @@ import searchRoutes from "./routes/search.routes.js";
 import webRoutes from "./routes/web.routes.js";
 import postsRoutes from "./routes/posts.routes.js";
 import agentRoutes from "./routes/agent.routes.js";
+import matchRoutes from "./routes/match.routes.js";
 import { embedText } from "./services/embedding.service.js";
 
 // Load env from the project root regardless of the current working directory.
@@ -216,6 +217,7 @@ app.use("/api", searchRoutes);
 app.use("/api", webRoutes);
 app.use("/api", postsRoutes);
 app.use("/api", agentRoutes);
+app.use("/api", matchRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

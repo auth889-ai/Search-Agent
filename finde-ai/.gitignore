@@ -35,3 +35,8 @@ kibana-data/
 tmp/
 temp/
 *.tmp
+
+# extra env safety
+.env.bak
+.env.*.bak
+*.bak

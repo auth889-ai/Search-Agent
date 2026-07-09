@@ -156,6 +156,30 @@ test("irrelevant query never surfaces high-fit junk", async () => {
   }
 });
 
+test("LLM match ranks captured posts by fit and drops junk", async () => {
+  const res = await fetch(`${BASE}/api/match`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: "remote software internship for CSE students",
+      posts: [
+        { text: "Free lunch giveaway at the cafeteria on Friday!" },
+        { text: "Brain Station 23 hiring Software Engineer Interns, remote, CSE students apply with CV." },
+        { text: "Selling my old textbooks, DM me." }
+      ]
+    })
+  });
+  const data = await res.json();
+  assert.equal(data.ok, true);
+  assert.ok(["llm", "embedding"].includes(data.mode), "match mode present");
+  assert.ok(data.results.length >= 1, "expected at least one match");
+  const top = data.results[0];
+  assert.match(top.text, /intern|Brain Station/i, "the internship post should rank first");
+  assert.ok(top.fitScore > 40, "relevant post should score well");
+  // Junk must not appear as a strong match.
+  assert.ok(!data.results.some((r) => /textbooks|lunch/i.test(r.text) && r.fitScore > 40), "junk must not score high");
+});
+
 test("empty query is rejected with 400", async () => {
   const res = await fetch(`${BASE}/api/search`, {
     method: "POST",
