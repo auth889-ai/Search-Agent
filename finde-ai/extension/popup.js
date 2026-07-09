@@ -63,10 +63,11 @@ function renderResults(data) {
   empty.classList.add("hidden");
 
   meta.classList.remove("hidden");
-  const modeLabel =
-    data.searchMode === "hybrid_semantic_keyword"
-      ? "hybrid (semantic + keyword)"
-      : "keyword only";
+  const modeLabel = data.searchMode === "advanced_rrf_mmr"
+    ? "hybrid · RRF + rerank"
+    : data.searchMode === "hybrid_semantic_keyword"
+    ? "hybrid (semantic + keyword)"
+    : "keyword";
   meta.innerHTML = `<span class="badge">${escapeHtml(data.intent)}</span> ${data.count} result(s) · ${modeLabel}`;
 
   if (!data.results.length) {

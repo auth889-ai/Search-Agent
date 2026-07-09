@@ -27,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["https://*.facebook.com/*", "https://*.linkedin.com/*"],
-      "js": ["content.js"],
+      "js": ["extract-core.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
