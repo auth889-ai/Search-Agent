@@ -14,6 +14,7 @@
 import { searchFindE } from "./search.service.js";
 import { searchWebWithProvider } from "./webProviders.service.js";
 import { rerankResults, rerankerEnabled } from "./rerank.service.js";
+import { chat, llmEnabled } from "./llm.service.js";
 
 const STOPWORDS = new Set([
   "the", "a", "an", "for", "and", "or", "to", "of", "in", "on", "with", "how",
@@ -127,6 +128,32 @@ function composeAnswer(query, ranked) {
   return { text: picked.join(" "), citations, confidence: avgFit };
 }
 
+/* -------- 4b. Optional LLM composer (grounded in retrieved sources) -------- */
+async function composeWithLLM(query, ranked) {
+  const sources = ranked
+    .slice(0, 5)
+    .map((r, i) => {
+      const body = (r.snippet || r.text || "").slice(0, 400);
+      const where = r.groupName || r.siteName || r.domain || r.sourceType;
+      return `[${i + 1}] ${r.title}\n${body}\n(source: ${where}${r.date ? ", " + String(r.date).slice(0, 10) : ""})`;
+    })
+    .join("\n\n");
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are FindE AI, a careful research assistant. Answer the user's question using ONLY the numbered SOURCES provided. Cite every claim with [n] matching the source number. Do not invent facts, links, or dates. If the sources do not answer the question, say so plainly. Keep it 2-4 sentences, concrete and neutral."
+    },
+    {
+      role: "user",
+      content: `Question: ${query}\n\nSOURCES:\n${sources}\n\nWrite the grounded answer with [n] citations.`
+    }
+  ];
+
+  return chat(messages, { temperature: 0.2, maxTokens: 500 });
+}
+
 function nextActions(intent, top) {
   const actions = [];
   if (top?.url) actions.push("Open the top-cited source and verify details.");
@@ -227,12 +254,25 @@ export async function runAgent({
     }
   }
 
-  // 4. COMPOSE grounded answer
+  // 4. COMPOSE grounded answer (extractive by default; LLM when a key is set)
   const answer = composeAnswer(normalized, ranked);
+  let answerMode = "extractive";
+  if (llmEnabled() && ranked.length) {
+    const llm = await composeWithLLM(normalized, ranked);
+    if (llm?.text) {
+      answer.text = llm.text;
+      answerMode = "llm_grounded";
+      trace.push({
+        agent: "AnswerComposer",
+        action: "llm_compose",
+        detail: `Grounded LLM answer via ${llm.provider} (${llm.model}).`
+      });
+    }
+  }
   trace.push({
     agent: "AnswerComposer",
     action: "compose",
-    detail: `Grounded answer from ${answer.citations.length} citation(s), ${answer.confidence}% confidence.`
+    detail: `${answerMode} answer from ${answer.citations.length} citation(s), ${answer.confidence}% confidence.`
   });
 
   return {
@@ -241,6 +281,7 @@ export async function runAgent({
     intent: plan.intent,
     plan,
     answer: answer.text,
+    answerMode,
     confidence: answer.confidence,
     citations: answer.citations,
     nextActions: nextActions(plan.intent, ranked[0]),
