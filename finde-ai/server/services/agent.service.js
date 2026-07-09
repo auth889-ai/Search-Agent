@@ -102,10 +102,15 @@ function composeAnswer(query, ranked) {
   scored.sort((a, b) => b.score - a.score);
   const picked = [];
   const usedDocs = new Set();
+  const seenSentences = new Set();
   for (const s of scored) {
     if (picked.length >= 3) break;
+    // Skip near-duplicate sentences (e.g. title == first line of text).
+    const norm = s.sentence.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 60);
+    if (seenSentences.has(norm)) continue;
     // Prefer covering different sources.
     if (usedDocs.has(s.docIdx) && picked.length < scored.length - 1) continue;
+    seenSentences.add(norm);
     usedDocs.add(s.docIdx);
     picked.push(`${s.sentence} [${s.docIdx + 1}]`);
   }
@@ -300,19 +305,23 @@ export async function runAgent({
 
   // 3b. When the cross-encoder ran, it is the most accurate relevance signal —
   // let it drive fitScore, ordering, and filtering out irrelevant results.
-  const RELEVANCE_FLOOR = 8; // below this cross-encoder score = irrelevant
-  const CONFIDENCE_FLOOR = 25; // below this top score = low-confidence answer
+  const RELEVANCE_FLOOR = 6; // raw cross-encoder score below this = true junk
+  const CONFIDENCE_FLOOR = 18; // blended top score below this = low-confidence
   if (neuralRerank) {
+    // Cross-encoder scores are compressed; blend with absolute semantic so a
+    // genuine-but-loose match still reads as helpful, while junk (low on BOTH)
+    // stays low. Ordering/filtering still respects the cross-encoder.
     ranked.forEach((r) => {
       if (typeof r.rerankScore === "number") {
-        r.fitScore = r.rerankScore;
+        const blended = Math.round(0.6 * r.rerankScore + 0.4 * (r.semanticFit ?? 0));
+        r.fitScore = blended;
         if (r.explanation?.scoreBreakdown) {
           r.explanation.scoreBreakdown.rerank = r.rerankScore;
-          r.explanation.scoreBreakdown.overall = r.rerankScore;
+          r.explanation.scoreBreakdown.overall = blended;
         }
       }
     });
-    ranked.sort((a, b) => (b.rerankScore ?? 0) - (a.rerankScore ?? 0));
+    ranked.sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
     const before = ranked.length;
     const filtered = ranked.filter((r) => (r.rerankScore ?? 0) >= RELEVANCE_FLOOR);
     ranked = filtered.length ? filtered : ranked.slice(0, 1);

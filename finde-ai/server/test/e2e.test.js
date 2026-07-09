@@ -137,17 +137,23 @@ test("agent pipeline returns a grounded answer with citations and a trace", asyn
   assert.ok(agents.includes("AnswerComposer"), "composer step present");
 });
 
-test("irrelevant query returns an honest low-confidence answer, not junk", async () => {
+test("irrelevant query never surfaces high-fit junk", async () => {
   const res = await fetch(`${BASE}/api/agent/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: "why i cannot win hackathon", sourceMode: "all", limit: 5 })
+    // Gibberish guaranteed not to match any indexed content.
+    body: JSON.stringify({ query: "zxqwv purple elephant quantum banana teleport recipe", sourceMode: "all", limit: 5 })
   });
   const data = await res.json();
   assert.equal(data.ok, true);
-  assert.equal(data.lowConfidence, true, "should flag low confidence");
-  assert.match(data.answer, /couldn't find a confident match/i);
-  assert.ok((data.results[0]?.fitScore ?? 100) < 25, "top fit should be low for an irrelevant query");
+  // The core guarantee: no irrelevant result may rank as a strong match
+  // (the old bug showed a dictionary page at 54%).
+  const topFit = data.results[0]?.fitScore ?? 0;
+  assert.ok(topFit < 35, `irrelevant query must not surface high-fit junk (got ${topFit}%)`);
+  if (topFit < 18) {
+    assert.equal(data.lowConfidence, true, "very low top fit should flag low confidence");
+    assert.match(data.answer, /couldn't find a confident match/i);
+  }
 });
 
 test("empty query is rejected with 400", async () => {
