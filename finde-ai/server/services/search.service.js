@@ -310,6 +310,70 @@ function computeConfidence(score, source) {
   return Math.max(35, raw);
 }
 
+const EXPLAIN_STOP = new Set([
+  "the", "a", "an", "for", "and", "or", "to", "of", "in", "on", "with", "how",
+  "what", "which", "is", "are", "my", "me", "can", "do", "does", "from", "at",
+  "by", "as", "be", "this", "that", "it", "you", "your", "we", "just", "who"
+]);
+
+function queryTerms(query) {
+  return String(query || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 2 && !EXPLAIN_STOP.has(t));
+}
+
+// Wrap query terms found in the text with <mark> for highlight attribution.
+function highlightTerms(text, terms) {
+  let out = String(text || "");
+  const uniq = [...new Set(terms)].filter(Boolean).sort((a, b) => b.length - a.length);
+  for (const term of uniq) {
+    const re = new RegExp(`\\b(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    out = out.replace(re, "<mark>$1</mark>");
+  }
+  return out;
+}
+
+// Build a rich, inspectable explanation for a single result.
+function buildExplanation({ source, terms, semanticFit, keywordFit, fitScore, confidence, rerankScore, matchedBy }) {
+  const haystack = `${source.title} ${source.text || source.snippet || ""} ${(source.topics || []).join(" ")}`.toLowerCase();
+  const matchedTerms = [...new Set(terms)].filter((t) => haystack.includes(t));
+
+  const ts = source.trustSignals || {};
+  const signals = [];
+  if (source.deadline) signals.push({ type: "deadline", label: `deadline ${String(source.deadline).slice(0, 10)}` });
+  if (source.location && source.location !== "global") signals.push({ type: "location", label: source.location });
+  if (Array.isArray(source.skills) && source.skills.length) signals.push({ type: "skills", label: source.skills.slice(0, 4).join(", ") });
+  if (ts.sourceOfficial) signals.push({ type: "official", label: "official / trusted source" });
+  if (ts.commentCount > 0) signals.push({ type: "discussion", label: `${ts.commentCount} community comments` });
+  if (ts.freshnessScore >= 0.85) signals.push({ type: "fresh", label: "recent" });
+
+  const scoreBreakdown = {
+    semantic: semanticFit ?? 0,
+    keyword: keywordFit ?? 0,
+    trust: confidence ?? 0,
+    rerank: rerankScore ?? null,
+    overall: fitScore ?? 0
+  };
+
+  // Human-readable ranking rationale.
+  const bits = [];
+  if (semanticFit != null) {
+    const s = semanticFit >= 55 ? "strong" : semanticFit >= 35 ? "moderate" : "weak";
+    bits.push(`${s} meaning match (${semanticFit}%)`);
+  }
+  if (keywordFit >= 60) bits.push("high keyword overlap");
+  else if (keywordFit > 0) bits.push("partial keyword overlap");
+  if (matchedBy.length === 2) bits.push("found by both semantic and keyword search");
+  if (rerankScore != null) bits.push(`cross-encoder reranked (${rerankScore}%)`);
+  if (ts.sourceOfficial) bits.push("official source");
+  if (source.deadline) bits.push("has an actionable deadline");
+  const rankReason = bits.length ? bits.join("; ") + "." : "matched your query.";
+
+  return { matchedTerms, signals, scoreBreakdown, rankReason };
+}
+
 // Map a fused/diversified candidate from the retrieval engine into a result.
 function mapCandidate(cand, context) {
   const source = cand.source || {};
