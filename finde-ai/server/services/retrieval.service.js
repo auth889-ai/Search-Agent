@@ -85,7 +85,10 @@ function bm25Search(text, indexes, size, filters) {
               type: "best_fields",
               fields: BM25_FIELDS,
               fuzziness: "AUTO",
-              operator: "or"
+              prefix_length: 2,
+              // Require most query terms to match so long junk pages that share
+              // a single common word don't get retrieved.
+              minimum_should_match: "2<70%"
             }
           }
         ],

@@ -298,10 +298,55 @@ export async function runAgent({
     }
   }
 
-  // 4. COMPOSE grounded answer (extractive by default; LLM when a key is set)
+  // 3b. When the cross-encoder ran, it is the most accurate relevance signal —
+  // let it drive fitScore, ordering, and filtering out irrelevant results.
+  const RELEVANCE_FLOOR = 8; // below this cross-encoder score = irrelevant
+  const CONFIDENCE_FLOOR = 25; // below this top score = low-confidence answer
+  if (neuralRerank) {
+    ranked.forEach((r) => {
+      if (typeof r.rerankScore === "number") {
+        r.fitScore = r.rerankScore;
+        if (r.explanation?.scoreBreakdown) {
+          r.explanation.scoreBreakdown.rerank = r.rerankScore;
+          r.explanation.scoreBreakdown.overall = r.rerankScore;
+        }
+      }
+    });
+    ranked.sort((a, b) => (b.rerankScore ?? 0) - (a.rerankScore ?? 0));
+    const before = ranked.length;
+    const filtered = ranked.filter((r) => (r.rerankScore ?? 0) >= RELEVANCE_FLOOR);
+    ranked = filtered.length ? filtered : ranked.slice(0, 1);
+    if (before !== ranked.length) {
+      trace.push({
+        agent: "EvidenceVerifier",
+        action: "relevance_filter",
+        detail: `Dropped ${before - ranked.length} result(s) below ${RELEVANCE_FLOOR}% cross-encoder relevance.`
+      });
+    }
+  }
+
+  const topFit = ranked[0]?.fitScore ?? 0;
+  const topSem = ranked[0]?.semanticFit ?? 0;
+  // Trust the cross-encoder when present; otherwise also require a real semantic
+  // match so keyword-only noise can't masquerade as a confident answer.
+  const lowConfidence = neuralRerank
+    ? topFit < CONFIDENCE_FLOOR
+    : topFit < CONFIDENCE_FLOOR || topSem < 20;
+
+  // 4. COMPOSE grounded answer. If nothing is confidently relevant, say so
+  // instead of stitching a misleading answer from weak matches.
   const answer = composeAnswer(normalized, ranked);
   let answerMode = "extractive";
-  if (llmEnabled() && ranked.length) {
+  if (lowConfidence) {
+    answer.text = `I couldn't find a confident match for "${normalized}" in the indexed sources (best fit ${topFit}%). The closest items are listed below, but they may not answer your question. Try indexing more relevant posts, switching the source, or turning on Web.`;
+    answer.confidence = topFit;
+    answerMode = "low_confidence";
+    trace.push({
+      agent: "AnswerComposer",
+      action: "low_confidence",
+      detail: `Top relevance ${topFit}% < ${CONFIDENCE_FLOOR}% — returned an honest "no confident match" answer.`
+    });
+  } else if (llmEnabled() && ranked.length) {
     const llm = await composeWithLLM(normalized, ranked);
     if (llm?.text) {
       answer.text = llm.text;
@@ -313,11 +358,13 @@ export async function runAgent({
       });
     }
   }
-  trace.push({
-    agent: "AnswerComposer",
-    action: "compose",
-    detail: `${answerMode} answer from ${answer.citations.length} citation(s), ${answer.confidence}% confidence.`
-  });
+  if (answerMode !== "low_confidence") {
+    trace.push({
+      agent: "AnswerComposer",
+      action: "compose",
+      detail: `${answerMode} answer from ${answer.citations.length} citation(s), ${answer.confidence}% confidence.`
+    });
+  }
 
   return {
     ok: true,
@@ -326,8 +373,9 @@ export async function runAgent({
     plan,
     answer: answer.text,
     answerMode,
+    lowConfidence,
     confidence: answer.confidence,
-    keyPoints: buildKeyPoints(normalized, ranked),
+    keyPoints: lowConfidence ? [] : buildKeyPoints(normalized, ranked),
     followUps: buildFollowUps(plan.intent, ranked),
     citations: answer.citations,
     nextActions: nextActions(plan.intent, ranked[0]),

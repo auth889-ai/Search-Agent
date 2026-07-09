@@ -128,8 +128,11 @@ function renderAnswer(data) {
   card.classList.remove("hidden");
   const conf = data.confidence ?? 0;
   ring($("answerRing"), conf, fitColor(conf), `${conf}%`);
-  $("answerKicker").textContent =
-    data.answerMode === "llm_grounded" ? "Grounded answer · LLM" : "Grounded answer";
+  $("answerKicker").textContent = data.lowConfidence
+    ? "No confident match"
+    : data.answerMode === "llm_grounded"
+    ? "Grounded answer · LLM"
+    : "Grounded answer";
   $("answerIntent").textContent =
     `intent: ${data.intent} · ${data.neuralRerank ? "neural-reranked · " : ""}${data.tookMs}ms`;
   $("answerText").innerHTML = citeMarkup(data.answer);

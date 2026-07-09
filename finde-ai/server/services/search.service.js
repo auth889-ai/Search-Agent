@@ -396,11 +396,20 @@ function mapCandidate(cand, context) {
 
   // Overall fit = fused rank (RRF) blended with semantic meaning.
   const rrfNorm = rrfMax > rrfMin ? (cand.rrf - rrfMin) / (rrfMax - rrfMin) : 1;
-  const fitScore = Math.round(100 * (0.5 * rrfNorm + 0.5 * (sem != null ? sem : rrfNorm)));
+  // Anchor fit on ABSOLUTE semantic similarity (this is a meaning search), then
+  // let fusion rank modulate it +/-30%. This way a weak-meaning doc stays low
+  // even if it is the best of a bad set (min-max rank would otherwise inflate it).
+  const fitScore =
+    sem != null
+      ? Math.round(100 * sem * (0.7 + 0.3 * rrfNorm))
+      : Math.round(55 * rrfNorm);
 
   const confidence = computeConfidence(0, source);
+  // Only claim a "semantic" match when the cosine similarity is actually decent;
+  // kNN always returns k docs, so mere presence isn't a real meaning match.
+  const MIN_SEMANTIC = 0.3;
   const matchedBy = [];
-  if (cand.knnRank != null) matchedBy.push("semantic");
+  if (cand.knnRank != null && sem != null && sem >= MIN_SEMANTIC) matchedBy.push("semantic");
   if (cand.bm25Rank != null) matchedBy.push("keyword");
 
   const terms = context.queryTerms || [];

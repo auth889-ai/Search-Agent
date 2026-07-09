@@ -137,6 +137,19 @@ test("agent pipeline returns a grounded answer with citations and a trace", asyn
   assert.ok(agents.includes("AnswerComposer"), "composer step present");
 });
 
+test("irrelevant query returns an honest low-confidence answer, not junk", async () => {
+  const res = await fetch(`${BASE}/api/agent/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: "why i cannot win hackathon", sourceMode: "all", limit: 5 })
+  });
+  const data = await res.json();
+  assert.equal(data.ok, true);
+  assert.equal(data.lowConfidence, true, "should flag low confidence");
+  assert.match(data.answer, /couldn't find a confident match/i);
+  assert.ok((data.results[0]?.fitScore ?? 100) < 25, "top fit should be low for an irrelevant query");
+});
+
 test("empty query is rejected with 400", async () => {
   const res = await fetch(`${BASE}/api/search`, {
     method: "POST",
