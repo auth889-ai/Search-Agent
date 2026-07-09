@@ -66,11 +66,13 @@ test("hybrid search returns semantic mode and fit scores", async () => {
   });
   const data = await res.json();
   assert.equal(data.ok, true);
-  assert.equal(data.searchMode, "hybrid_semantic_keyword");
+  assert.equal(data.searchMode, "advanced_rrf_mmr");
+  assert.ok(data.queryPlan?.retrieval?.fusion?.startsWith("weighted_rrf"), "RRF fusion in plan");
   assert.ok(data.results.length > 0, "expected results");
   const top = data.results[0];
   assert.ok(typeof top.fitScore === "number", "fitScore present");
   assert.ok(typeof top.semanticFit === "number", "semanticFit present");
+  assert.ok(Array.isArray(top.matchedBy), "matchedBy present");
 });
 
 test("semantic match works with NO keyword overlap", async () => {

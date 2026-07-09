@@ -1,5 +1,6 @@
 import { Client } from "@elastic/elasticsearch";
-import { embedText, cosineSimilarity } from "./embedding.service.js";
+import { cosineSimilarity } from "./embedding.service.js";
+import { advancedRetrieve } from "./retrieval.service.js";
 
 const ELASTICSEARCH_NODE = process.env.ELASTICSEARCH_NODE || "http://localhost:9200";
 const COMMUNITY_POSTS_INDEX = process.env.COMMUNITY_POSTS_INDEX || "finde_community_posts";
@@ -309,53 +310,49 @@ function computeConfidence(score, source) {
   return Math.max(35, raw);
 }
 
-function computeFit(hit, context) {
-  const source = hit._source || {};
-  const rawScore = hit._score || 0;
-  const { qvec, scoreMin = 0, scoreMax = 0 } = context;
+// Map a fused/diversified candidate from the retrieval engine into a result.
+function mapCandidate(cand, context) {
+  const source = cand.source || {};
+  const { queryVector, rrfMin = 0, rrfMax = 0, rankCap = 20 } = context;
 
   const embedding = source.embedding;
-  const semanticFit =
-    qvec && Array.isArray(embedding)
-      ? Math.round(
-          Math.max(0, Math.min(1, cosineSimilarity(qvec, embedding))) * 100
-        )
+  const sem =
+    queryVector && Array.isArray(embedding)
+      ? Math.max(0, Math.min(1, cosineSimilarity(queryVector, embedding)))
+      : typeof cand.relevance === "number"
+      ? Math.max(0, cand.relevance)
       : null;
+  const semanticFit = sem != null ? Math.round(sem * 100) : null;
 
+  // Lexical strength from best BM25 rank (rank-based, no fragile score norm).
   const keywordFit =
-    scoreMax > scoreMin
-      ? Math.round(((rawScore - scoreMin) / (scoreMax - scoreMin)) * 100)
-      : rawScore > 0
-      ? 100
+    cand.bm25Rank != null
+      ? Math.round((100 * (rankCap - Math.min(cand.bm25Rank, rankCap - 1))) / rankCap)
       : 0;
 
-  // Blend meaning (semantic) with lexical (keyword) match into one fit score.
-  const fitScore =
-    semanticFit != null
-      ? Math.round(0.7 * semanticFit + 0.3 * keywordFit)
-      : keywordFit;
+  // Overall fit = fused rank (RRF) blended with semantic meaning.
+  const rrfNorm = rrfMax > rrfMin ? (cand.rrf - rrfMin) / (rrfMax - rrfMin) : 1;
+  const fitScore = Math.round(100 * (0.5 * rrfNorm + 0.5 * (sem != null ? sem : rrfNorm)));
 
-  return { semanticFit, keywordFit, fitScore };
-}
-
-function mapHit(hit, context = {}) {
-  const source = hit._source || {};
-  const confidence = computeConfidence(hit._score || 0, source);
-  const { semanticFit, keywordFit, fitScore } = computeFit(hit, context);
+  const confidence = computeConfidence(0, source);
+  const matchedBy = [];
+  if (cand.knnRank != null) matchedBy.push("semantic");
+  if (cand.bm25Rank != null) matchedBy.push("keyword");
 
   return {
-    id: hit._id,
-    index: hit._index,
-    score: hit._score,
+    id: cand.id,
+    index: cand.index,
     fitScore,
     semanticFit,
     keywordFit,
+    rrfScore: Number((cand.rrf || 0).toFixed(5)),
+    matchedBy,
     confidence,
     sourceType: source.sourceType || "unknown",
     title: source.title || "Untitled source",
     text: source.text || "",
     snippet: source.snippet || "",
-    matchedSnippets: cleanHighlight(hit),
+    matchedSnippets: source.snippet ? [source.snippet] : [],
     url: source.url || "",
     date: source.date || null,
     deadline: source.deadline || null,
@@ -366,15 +363,19 @@ function mapHit(hit, context = {}) {
     siteName: source.siteName || "",
     domain: source.domain || "",
     trustSignals: source.trustSignals || {},
-    whyRelevant: buildWhyRelevant(source, confidence)
+    whyRelevant: buildWhyRelevant(source, confidence, matchedBy)
   };
 }
 
-function buildWhyRelevant(source, confidence) {
+function buildWhyRelevant(source, confidence, matchedBy = []) {
   const reasons = [];
 
+  if (matchedBy.length) {
+    reasons.push(`matched by ${matchedBy.join(" + ")}`);
+  }
+
   if (Array.isArray(source.topics) && source.topics.length > 0) {
-    reasons.push(`matches topics: ${source.topics.slice(0, 4).join(", ")}`);
+    reasons.push(`topics: ${source.topics.slice(0, 4).join(", ")}`);
   }
 
   if (source.trustSignals?.sourceOfficial) {
@@ -452,47 +453,40 @@ export async function searchFindE({
   const indexes = buildIndexList(sourceMode);
   const filters = buildFilters({ topics, location, sourceType, dateFrom, dateTo });
 
-  const body = buildSearchBody({
+  if (!includeExpired) {
+    filters.push({
+      bool: {
+        should: [
+          { bool: { must_not: { exists: { field: "deadline" } } } },
+          { range: { deadline: { gte: "now/d" } } }
+        ],
+        minimum_should_match: 1
+      }
+    });
+  }
+
+  // Advanced retrieval: multi-query -> BM25 + kNN per query -> weighted RRF
+  // fusion -> MMR diversification. See retrieval.service.js.
+  const { queryVector, candidates, plan } = await advancedRetrieve({
     query: normalizedQuery,
-    intent,
+    indexes,
     size: safeLimit,
     filters,
-    includeExpired
+    intent
   });
 
-  // Semantic layer: embed the query and add a kNN clause for meaning-based recall.
-  // ES sums the BM25 (query) and kNN scores, giving hybrid ranking. If the model
-  // is unavailable, qvec is null and we fall back to pure keyword search.
-  const qvec = await embedText(normalizedQuery);
-  const knn = qvec
-    ? {
-        field: "embedding",
-        query_vector: qvec,
-        k: safeLimit,
-        num_candidates: Math.max(50, safeLimit * 10),
-        boost: 4
-      }
-    : undefined;
+  const context = {
+    queryVector,
+    rrfMin: plan.rrfMin,
+    rrfMax: plan.rrfMax,
+    rankCap: safeLimit * 2
+  };
 
-  const response = await elastic.search({
-    index: indexes,
-    ...body,
-    ...(knn ? { knn } : {})
-  });
-
-  const hits = response.hits?.hits || [];
-
-  // Min/max of raw ES scores for normalizing the keyword component.
-  const scores = hits.map((h) => h._score || 0);
-  const scoreMin = scores.length ? Math.min(...scores) : 0;
-  const scoreMax = scores.length ? Math.max(...scores) : 0;
-  const context = { qvec, scoreMin, scoreMax };
-
-  const results = hits
-    .map((hit) => mapHit(hit, context))
+  const results = candidates
+    .map((cand) => mapCandidate(cand, context))
     .sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
   const grouped = groupResults(results);
-  const searchMode = qvec ? "hybrid_semantic_keyword" : "keyword_only";
+  const searchMode = queryVector ? "advanced_rrf_mmr" : "keyword_rrf";
 
   return {
     ok: true,
@@ -500,11 +494,12 @@ export async function searchFindE({
     intent,
     sourceMode,
     searchMode,
-    total: response.hits?.total?.value ?? results.length,
+    total: results.length,
     count: results.length,
     queryPlan: {
       indexes,
       searchMode,
+      retrieval: plan,
       intentBoosts: getIntentBoosts(intent),
       filters: {
         topics,

@@ -114,6 +114,7 @@ function knnSearch(vector, indexes, size, filters) {
 function rrfFuse(lists) {
   const agg = new Map();
   for (const list of lists) {
+    const isBm25 = list.kind.startsWith("bm25");
     list.hits.forEach((hit, rank) => {
       const contribution = list.weight * (1 / (RRF_K + rank + 1));
       const cur =
@@ -122,10 +123,14 @@ function rrfFuse(lists) {
           index: hit.index,
           source: hit.source,
           rrf: 0,
+          bm25Rank: null,
+          knnRank: null,
           hitBy: new Set()
         };
       cur.rrf += contribution;
       cur.hitBy.add(list.kind);
+      if (isBm25) cur.bm25Rank = cur.bm25Rank == null ? rank : Math.min(cur.bm25Rank, rank);
+      else cur.knnRank = cur.knnRank == null ? rank : Math.min(cur.knnRank, rank);
       // Prefer a copy of the source that carries the embedding (for MMR).
       if (!Array.isArray(cur.source?.embedding) && Array.isArray(hit.source?.embedding)) {
         cur.source = hit.source;
