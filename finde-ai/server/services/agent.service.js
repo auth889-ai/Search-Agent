@@ -117,7 +117,8 @@ function composeAnswer(query, ranked) {
     url: r.url || "",
     source: r.groupName || r.siteName || r.domain || r.sourceType,
     fitScore: r.fitScore,
-    date: r.date
+    date: r.date,
+    snippet: (r.snippet || r.text || "").slice(0, 220)
   }));
 
   const avgFit = Math.round(
@@ -152,6 +153,49 @@ async function composeWithLLM(query, ranked) {
   ];
 
   return chat(messages, { temperature: 0.2, maxTokens: 500 });
+}
+
+// Extract 2-3 key points (salient sentences) with the citation they came from.
+function buildKeyPoints(query, ranked) {
+  const qTokens = new Set(tokenize(query));
+  const scored = [];
+  ranked.slice(0, 5).forEach((doc, idx) => {
+    for (const sentence of splitSentences(`${doc.text || doc.snippet}`)) {
+      const overlap = tokenize(sentence).filter((t) => qTokens.has(t)).length;
+      if (overlap > 0) scored.push({ text: sentence, ref: idx + 1, score: overlap + (doc.fitScore || 0) / 100 });
+    }
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const seen = new Set();
+  const points = [];
+  for (const s of scored) {
+    const key = s.text.slice(0, 60);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    points.push({ text: s.text, ref: s.ref });
+    if (points.length >= 3) break;
+  }
+  return points;
+}
+
+// Suggest Perplexity-style follow-up questions from intent + retrieved signals.
+function buildFollowUps(intent, ranked) {
+  const byIntent = {
+    career: ["What are the application requirements?", "Is it paid or unpaid?", "What is the deadline?"],
+    research: ["What dataset should I start with?", "What baseline models are recommended?", "How do I make it novel?"],
+    scholarship: ["Am I eligible?", "What documents are required?", "When is the deadline?"],
+    coding_help: ["What is the exact fix?", "What version does this affect?", "How do I reproduce it?"],
+    general_search: ["Show only official sources", "Any beginner-friendly options?", "What are the deadlines?"]
+  };
+  const base = byIntent[intent] || byIntent.general_search;
+
+  const dynamic = [];
+  const hasDeadline = ranked.some((r) => r.deadline);
+  const hasOfficial = ranked.some((r) => r.trustSignals?.sourceOfficial);
+  if (hasDeadline && !base.some((q) => /deadline/i.test(q))) dynamic.push("Which ones have the nearest deadline?");
+  if (hasOfficial) dynamic.push("Compare the official vs community sources");
+
+  return [...base, ...dynamic].slice(0, 4);
 }
 
 function nextActions(intent, top) {
@@ -283,6 +327,8 @@ export async function runAgent({
     answer: answer.text,
     answerMode,
     confidence: answer.confidence,
+    keyPoints: buildKeyPoints(normalized, ranked),
+    followUps: buildFollowUps(plan.intent, ranked),
     citations: answer.citations,
     nextActions: nextActions(plan.intent, ranked[0]),
     results: ranked,

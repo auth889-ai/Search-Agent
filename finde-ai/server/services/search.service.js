@@ -403,6 +403,22 @@ function mapCandidate(cand, context) {
   if (cand.knnRank != null) matchedBy.push("semantic");
   if (cand.bm25Rank != null) matchedBy.push("keyword");
 
+  const terms = context.queryTerms || [];
+  const rerankScore = typeof cand.rerankScore === "number" ? cand.rerankScore : null;
+  const explanation = buildExplanation({
+    source,
+    terms,
+    semanticFit,
+    keywordFit,
+    fitScore,
+    confidence,
+    rerankScore,
+    matchedBy
+  });
+
+  const rawSnippet = source.snippet || (source.text || "").slice(0, 260);
+  const highlightedSnippet = highlightTerms(rawSnippet, terms);
+
   return {
     id: cand.id,
     index: cand.index,
@@ -410,23 +426,27 @@ function mapCandidate(cand, context) {
     semanticFit,
     keywordFit,
     rrfScore: Number((cand.rrf || 0).toFixed(5)),
+    rerankScore,
     matchedBy,
     confidence,
     sourceType: source.sourceType || "unknown",
     title: source.title || "Untitled source",
     text: source.text || "",
-    snippet: source.snippet || "",
-    matchedSnippets: source.snippet ? [source.snippet] : [],
+    snippet: rawSnippet,
+    highlightedSnippet,
+    matchedSnippets: [highlightedSnippet],
     url: source.url || "",
     date: source.date || null,
     deadline: source.deadline || null,
     topics: source.topics || [],
     tags: source.tags || [],
+    skills: source.skills || [],
     location: source.location || "",
     groupName: source.groupName || "",
     siteName: source.siteName || "",
     domain: source.domain || "",
     trustSignals: source.trustSignals || {},
+    explanation,
     whyRelevant: buildWhyRelevant(source, confidence, matchedBy)
   };
 }
@@ -541,6 +561,7 @@ export async function searchFindE({
 
   const context = {
     queryVector,
+    queryTerms: queryTerms(normalizedQuery),
     rrfMin: plan.rrfMin,
     rrfMax: plan.rrfMax,
     rankCap: safeLimit * 2
