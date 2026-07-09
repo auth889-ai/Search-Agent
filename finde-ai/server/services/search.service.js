@@ -1,4 +1,5 @@
 import { Client } from "@elastic/elasticsearch";
+import { embedText, cosineSimilarity } from "./embedding.service.js";
 
 const ELASTICSEARCH_NODE = process.env.ELASTICSEARCH_NODE || "http://localhost:9200";
 const COMMUNITY_POSTS_INDEX = process.env.COMMUNITY_POSTS_INDEX || "finde_community_posts";
@@ -308,14 +309,47 @@ function computeConfidence(score, source) {
   return Math.max(35, raw);
 }
 
-function mapHit(hit) {
+function computeFit(hit, context) {
+  const source = hit._source || {};
+  const rawScore = hit._score || 0;
+  const { qvec, scoreMin = 0, scoreMax = 0 } = context;
+
+  const embedding = source.embedding;
+  const semanticFit =
+    qvec && Array.isArray(embedding)
+      ? Math.round(
+          Math.max(0, Math.min(1, cosineSimilarity(qvec, embedding))) * 100
+        )
+      : null;
+
+  const keywordFit =
+    scoreMax > scoreMin
+      ? Math.round(((rawScore - scoreMin) / (scoreMax - scoreMin)) * 100)
+      : rawScore > 0
+      ? 100
+      : 0;
+
+  // Blend meaning (semantic) with lexical (keyword) match into one fit score.
+  const fitScore =
+    semanticFit != null
+      ? Math.round(0.7 * semanticFit + 0.3 * keywordFit)
+      : keywordFit;
+
+  return { semanticFit, keywordFit, fitScore };
+}
+
+function mapHit(hit, context = {}) {
   const source = hit._source || {};
   const confidence = computeConfidence(hit._score || 0, source);
+  const { semanticFit, keywordFit, fitScore } = computeFit(hit, context);
 
   return {
     id: hit._id,
     index: hit._index,
     score: hit._score,
+    fitScore,
+    semanticFit,
+    keywordFit,
     confidence,
     sourceType: source.sourceType || "unknown",
     title: source.title || "Untitled source",
@@ -385,7 +419,7 @@ function buildAnswerDraft({ query, intent, results }) {
   const webCount = results.filter((r) => r.index === WEB_SOURCES_INDEX).length;
 
   return {
-    summary: `Best match for "${query}" is "${top.title}" with ${top.confidence}% confidence. Intent detected: ${intent}. Found ${communityCount} community result(s) and ${webCount} web result(s).`,
+    summary: `Best match for "${query}" is "${top.title}" with ${top.fitScore}% fit (${top.confidence}% trust). Intent detected: ${intent}. Found ${communityCount} community result(s) and ${webCount} web result(s).`,
     nextActions: [
       top.url ? "Open the strongest source link." : "Review the strongest matched source.",
       "Check date/deadline before acting.",
@@ -426,24 +460,51 @@ export async function searchFindE({
     includeExpired
   });
 
+  // Semantic layer: embed the query and add a kNN clause for meaning-based recall.
+  // ES sums the BM25 (query) and kNN scores, giving hybrid ranking. If the model
+  // is unavailable, qvec is null and we fall back to pure keyword search.
+  const qvec = await embedText(normalizedQuery);
+  const knn = qvec
+    ? {
+        field: "embedding",
+        query_vector: qvec,
+        k: safeLimit,
+        num_candidates: Math.max(50, safeLimit * 10),
+        boost: 4
+      }
+    : undefined;
+
   const response = await elastic.search({
     index: indexes,
-    ...body
+    ...body,
+    ...(knn ? { knn } : {})
   });
 
   const hits = response.hits?.hits || [];
-  const results = hits.map(mapHit).sort((a, b) => b.confidence - a.confidence);
+
+  // Min/max of raw ES scores for normalizing the keyword component.
+  const scores = hits.map((h) => h._score || 0);
+  const scoreMin = scores.length ? Math.min(...scores) : 0;
+  const scoreMax = scores.length ? Math.max(...scores) : 0;
+  const context = { qvec, scoreMin, scoreMax };
+
+  const results = hits
+    .map((hit) => mapHit(hit, context))
+    .sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
   const grouped = groupResults(results);
+  const searchMode = qvec ? "hybrid_semantic_keyword" : "keyword_only";
 
   return {
     ok: true,
     query: normalizedQuery,
     intent,
     sourceMode,
+    searchMode,
     total: response.hits?.total?.value ?? results.length,
     count: results.length,
     queryPlan: {
       indexes,
+      searchMode,
       intentBoosts: getIntentBoosts(intent),
       filters: {
         topics,

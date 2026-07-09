@@ -69,6 +69,13 @@ const baseProperties = {
   embeddingText: {
     type: "text",
     analyzer: "finde_text_analyzer"
+  },
+  // Semantic vector for NLP fit-scoring (all-MiniLM-L6-v2 => 384 dims, cosine).
+  embedding: {
+    type: "dense_vector",
+    dims: 384,
+    index: true,
+    similarity: "cosine"
   }
 };
 

@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { Client } from "@elastic/elasticsearch";
+import { attachEmbeddings } from "../../server/services/embedding.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,22 +63,23 @@ async function upsertMany(index, docs) {
     return;
   }
 
-  const operations = docs.flatMap((doc) => {
-    const normalized = normalizeDoc(doc);
+  const normalizedDocs = docs.map(normalizeDoc);
 
-    return [
-      {
-        update: {
-          _index: index,
-          _id: normalized.docId
-        }
-      },
-      {
-        doc: normalized,
-        doc_as_upsert: true
+  // Add semantic vectors so seeded demo data is searchable by meaning.
+  await attachEmbeddings(normalizedDocs);
+
+  const operations = normalizedDocs.flatMap((normalized) => [
+    {
+      update: {
+        _index: index,
+        _id: normalized.docId
       }
-    ];
-  });
+    },
+    {
+      doc: normalized,
+      doc_as_upsert: true
+    }
+  ]);
 
   const result = await elastic.bulk({
     refresh: true,

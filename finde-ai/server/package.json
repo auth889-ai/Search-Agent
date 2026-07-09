@@ -8,13 +8,24 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
+    "test": "node --test test/*.test.js",
+    "agent:demo": "curl http://localhost:8080/api/agent/demo",
+    "agent:ask": "curl -X POST http://localhost:8080/api/agent/ask -H 'Content-Type: application/json' -d '{\"query\":\"beginner AI cybersecurity research idea\",\"sourceMode\":\"all\",\"limit\":5}'",
     "health": "curl http://localhost:8080/api/health",
+    "elastic:health": "curl http://localhost:8080/api/elastic/health",
     "search:demo": "curl http://localhost:8080/api/search/demo",
     "search:internship": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"remote frontend internship for CSE students\",\"sourceMode\":\"all\",\"limit\":5}'",
-    "search:research": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"AI cybersecurity research idea for beginner\",\"sourceMode\":\"all\",\"limit\":5}'"
+    "search:research": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"AI cybersecurity research idea for beginner\",\"sourceMode\":\"all\",\"limit\":5}'",
+    "web:demo": "curl http://localhost:8080/api/web/search/demo",
+    "web:internship": "curl -X POST http://localhost:8080/api/web/search -H 'Content-Type: application/json' -d '{\"query\":\"remote software engineering internship for CSE students\",\"limit\":5,\"cache\":true}'",
+    "posts:payload": "curl http://localhost:8080/api/posts/demo-payload",
+    "posts:demo": "curl -X POST http://localhost:8080/api/posts/demo-ingest",
+    "posts:search": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"React internship CSE student deadline\",\"sourceMode\":\"community\",\"limit\":5}'",
+    "research:search": "curl -X POST http://localhost:8080/api/search -H 'Content-Type: application/json' -d '{\"query\":\"AI cybersecurity FYP idea CICIDS SHAP\",\"sourceMode\":\"community\",\"limit\":5}'"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",
+    "@xenova/transformers": "^2.17.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

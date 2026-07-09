@@ -2,12 +2,21 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { Client } from "@elastic/elasticsearch";
-import searchRoutes from "./routes/search.routes.js";
 
-dotenv.config({ path: "../.env" });
-dotenv.config({ path: "../.env.example" });
+import searchRoutes from "./routes/search.routes.js";
+import webRoutes from "./routes/web.routes.js";
+import postsRoutes from "./routes/posts.routes.js";
+import agentRoutes from "./routes/agent.routes.js";
+
+// Load env from the project root regardless of the current working directory.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+dotenv.config({ path: path.join(PROJECT_ROOT, ".env") });
+dotenv.config({ path: path.join(PROJECT_ROOT, ".env.example") });
 
 const app = express();
 
@@ -32,6 +41,7 @@ const safetyPolicy = {
     "Do not auto-scroll Facebook or community pages.",
     "Do not bypass login, privacy controls, or platform protections.",
     "Do not collect hidden/private data.",
+    "Do not run background mass scraping.",
     "Demo can use sample, owned, or approved datasets."
   ]
 };
@@ -43,11 +53,20 @@ const elastic = new Client({
 app.use(helmet());
 app.use(
   cors({
-    origin: CLIENT_ORIGIN,
+    // Allow the web dashboard, the Chrome extension, and local tools.
+    origin(origin, callback) {
+      const allowed =
+        !origin ||
+        origin === CLIENT_ORIGIN ||
+        origin.startsWith("chrome-extension://") ||
+        origin.startsWith("http://localhost") ||
+        origin.startsWith("http://127.0.0.1");
+      callback(null, allowed);
+    },
     credentials: true
   })
 );
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "8mb" }));
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => {
@@ -55,18 +74,57 @@ app.get("/", (_req, res) => {
     ok: true,
     app: "FindE AI",
     description:
-      "AI Community + Web Search Agent using Chrome Extension, Elasticsearch, Elastic MCP, and Gemini.",
+      "AI Community + Web Search Agent using Chrome Extension, Tavily/web search, Elasticsearch, Elastic MCP, and Gemini.",
     docs: {
       health: "/api/health",
       safety: "/api/safety",
       elastic: "/api/elastic/health",
       search: "/api/search",
-      demoSearch: "/api/search/demo"
+      demoSearch: "/api/search/demo",
+      webSearch: "/api/web/search",
+      demoWebSearch: "/api/web/search/demo",
+      postsIndex: "/api/posts/index",
+      postsDemoPayload: "/api/posts/demo-payload",
+      postsDemoIngest: "/api/posts/demo-ingest"
     }
   });
 });
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
+  let elasticStatus = {
+    reachable: false,
+    status: "unknown",
+    communityDocs: null,
+    webDocs: null,
+    savedDocs: null
+  };
+
+  try {
+    const health = await elastic.cluster.health();
+
+    const [communityCount, webCount, savedCount] = await Promise.all([
+      elastic.count({ index: COMMUNITY_POSTS_INDEX }).catch(() => ({ count: 0 })),
+      elastic.count({ index: WEB_SOURCES_INDEX }).catch(() => ({ count: 0 })),
+      elastic.count({ index: USER_KNOWLEDGE_INDEX }).catch(() => ({ count: 0 }))
+    ]);
+
+    elasticStatus = {
+      reachable: true,
+      status: health.status,
+      communityDocs: communityCount.count,
+      webDocs: webCount.count,
+      savedDocs: savedCount.count
+    };
+  } catch {
+    elasticStatus = {
+      reachable: false,
+      status: "unreachable",
+      communityDocs: null,
+      webDocs: null,
+      savedDocs: null
+    };
+  }
+
   res.json({
     ok: true,
     service: "finde-ai-server",
@@ -78,17 +136,25 @@ app.get("/api/health", (_req, res) => {
       userKnowledge: USER_KNOWLEDGE_INDEX
     },
     capabilities: {
-      elasticsearchSearch: true,
-      googleWebSearch: Boolean(process.env.GOOGLE_CSE_API_KEY),
+      elasticsearchSearch: elasticStatus.reachable,
+      tavilyWebSearch: Boolean(process.env.TAVILY_API_KEY),
+      selectedWebProvider: process.env.WEB_SEARCH_PROVIDER || "tavily",
+      googleWebSearchConfigured: Boolean(
+        process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_ENGINE_ID
+      ),
+      communityPostIngestion: true,
+      visiblePostSafetyGate: true,
       elasticMcpEnabled: process.env.ELASTIC_MCP_ENABLED === "true",
       geminiConfigured: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
       )
     },
+    elastic: elasticStatus,
     safety: {
       visiblePostIndexingOnly: safetyPolicy.allowVisiblePostIndexingOnly,
       autoScrollAllowed: safetyPolicy.allowAutoScroll,
-      hiddenScrapingAllowed: safetyPolicy.allowHiddenScraping
+      hiddenScrapingAllowed: safetyPolicy.allowHiddenScraping,
+      loginBypassAllowed: false
     }
   });
 });
@@ -106,6 +172,12 @@ app.get("/api/elastic/health", async (_req, res) => {
     const info = await elastic.info();
     const health = await elastic.cluster.health();
 
+    const [communityCount, webCount, savedCount] = await Promise.all([
+      elastic.count({ index: COMMUNITY_POSTS_INDEX }).catch(() => ({ count: 0 })),
+      elastic.count({ index: WEB_SOURCES_INDEX }).catch(() => ({ count: 0 })),
+      elastic.count({ index: USER_KNOWLEDGE_INDEX }).catch(() => ({ count: 0 }))
+    ]);
+
     res.json({
       ok: true,
       elasticsearch: {
@@ -113,7 +185,12 @@ app.get("/api/elastic/health", async (_req, res) => {
         clusterName: info.cluster_name,
         version: info.version?.number,
         status: health.status,
-        numberOfNodes: health.number_of_nodes
+        numberOfNodes: health.number_of_nodes,
+        documents: {
+          communityPosts: communityCount.count,
+          webSources: webCount.count,
+          userKnowledge: savedCount.count
+        }
       }
     });
   } catch (error) {
@@ -127,12 +204,29 @@ app.get("/api/elastic/health", async (_req, res) => {
 });
 
 app.use("/api", searchRoutes);
+app.use("/api", webRoutes);
+app.use("/api", postsRoutes);
+app.use("/api", agentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
     message: "Route not found.",
-    path: req.path
+    path: req.path,
+    availableRoutes: [
+      "GET /api/health",
+      "GET /api/safety",
+      "GET /api/elastic/health",
+      "GET /api/search/demo",
+      "POST /api/search",
+      "GET /api/web/search/demo",
+      "POST /api/web/search",
+      "POST /api/web/manual",
+      "GET /api/posts/demo-payload",
+      "POST /api/posts/demo-ingest",
+      "POST /api/posts/index",
+      "POST /api/posts/index-one"
+    ]
   });
 });
 
@@ -140,4 +234,6 @@ app.listen(PORT, () => {
   console.log(`FindE AI backend running on http://localhost:${PORT}`);
   console.log(`Elasticsearch node: ${ELASTICSEARCH_NODE}`);
   console.log(`Search endpoint: http://localhost:${PORT}/api/search`);
+  console.log(`Web search endpoint: http://localhost:${PORT}/api/web/search`);
+  console.log(`Posts ingestion endpoint: http://localhost:${PORT}/api/posts/index`);
 });

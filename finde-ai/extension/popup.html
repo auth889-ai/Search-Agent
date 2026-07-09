@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>FindE AI</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark">✦</span>
+        <div class="brand-text">
+          <h1>FindE AI</h1>
+          <p>Semantic search agent</p>
+        </div>
+      </div>
+      <div class="status" id="status" title="Backend status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">checking…</span>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="search">Search</button>
+      <button class="tab" data-tab="index">Index posts</button>
+    </nav>
+
+    <!-- SEARCH TAB -->
+    <section class="panel active" id="panel-search">
+      <div class="search-box">
+        <input
+          id="queryInput"
+          type="text"
+          placeholder="Ask anything — e.g. remote internship for beginners"
+          autocomplete="off"
+        />
+        <button id="searchBtn" class="primary-btn">Search</button>
+      </div>
+
+      <div class="source-toggle" id="sourceToggle">
+        <button class="chip active" data-source="all">All</button>
+        <button class="chip" data-source="community">Community</button>
+        <button class="chip" data-source="web">Web</button>
+      </div>
+
+      <div id="searchMeta" class="meta hidden"></div>
+      <div id="results" class="results"></div>
+      <div id="searchEmpty" class="empty">
+        Type a question and press Search. Results are ranked by a
+        <strong>fit score</strong> that blends meaning (semantic) with keywords.
+      </div>
+    </section>
+
+    <!-- INDEX TAB -->
+    <section class="panel" id="panel-index">
+      <p class="index-intro">
+        Read the posts <strong>currently visible</strong> on this Facebook /
+        LinkedIn tab and add them to your searchable community memory.
+      </p>
+      <button id="readBtn" class="primary-btn wide">Read visible posts</button>
+      <div id="capturePreview" class="capture-preview"></div>
+      <button id="indexBtn" class="primary-btn wide hidden">Index posts</button>
+      <div id="indexResult" class="index-result"></div>
+
+      <div class="safety-note">
+        <span>🛡️</span>
+        <div>
+          Safe mode: only visible posts, no auto-scroll, no hidden content, no
+          login bypass.
+        </div>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      <label>
+        Backend
+        <input id="apiBaseInput" type="text" spellcheck="false" />
+      </label>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
