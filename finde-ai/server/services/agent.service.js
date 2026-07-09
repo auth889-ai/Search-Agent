@@ -13,6 +13,7 @@
  */
 import { searchFindE } from "./search.service.js";
 import { searchWebWithProvider } from "./webProviders.service.js";
+import { rerankResults, rerankerEnabled } from "./rerank.service.js";
 
 const STOPWORDS = new Set([
   "the", "a", "an", "for", "and", "or", "to", "of", "in", "on", "with", "how",
@@ -202,13 +203,29 @@ export async function runAgent({
     }
   }
 
-  // 3. VERIFY + RE-RANK
-  const ranked = verifyAndRerank(searchResult.results, minFit).slice(0, limit);
+  // 3. VERIFY + RE-RANK (local heuristic first, then optional neural rerank)
+  let ranked = verifyAndRerank(searchResult.results, minFit).slice(0, limit);
   trace.push({
     agent: "EvidenceVerifier",
     action: "rerank",
     detail: `Kept ${ranked.length} verified result(s) (fit >= ${minFit}).`
   });
+
+  let neuralRerank = false;
+  if (rerankerEnabled() && ranked.length >= 2) {
+    const { reranked, used, error } = await rerankResults(normalized, ranked, { topN: limit });
+    if (used) {
+      ranked = reranked;
+      neuralRerank = true;
+      trace.push({
+        agent: "EvidenceVerifier",
+        action: "neural_rerank",
+        detail: `Cohere cross-encoder reordered the top ${ranked.length} result(s).`
+      });
+    } else if (error) {
+      trace.push({ agent: "EvidenceVerifier", action: "neural_rerank_skipped", detail: error });
+    }
+  }
 
   // 4. COMPOSE grounded answer
   const answer = composeAnswer(normalized, ranked);
@@ -229,6 +246,7 @@ export async function runAgent({
     nextActions: nextActions(plan.intent, ranked[0]),
     results: ranked,
     webAdded,
+    neuralRerank,
     trace,
     tookMs: Date.now() - t0
   };
