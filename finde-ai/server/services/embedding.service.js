@@ -59,14 +59,43 @@ export async function embedText(text) {
 }
 
 /**
- * Embed many strings. Returns an array aligned with input (null where failed).
+ * Embed many strings in a SINGLE batched model pass (much faster than looping).
+ * Returns an array aligned with input (null where the text was empty/failed).
  */
 export async function embedMany(texts = []) {
-  const out = [];
-  for (const text of texts) {
-    // eslint-disable-next-line no-await-in-loop
-    out.push(await embedText(text));
+  const out = new Array(texts.length).fill(null);
+  const keepIdx = [];
+  const toEmbed = [];
+  texts.forEach((t, i) => {
+    const c = cleanForEmbedding(t);
+    if (c) {
+      keepIdx.push(i);
+      toEmbed.push(c);
+    }
+  });
+  if (!toEmbed.length) return out;
+
+  try {
+    const extractor = await getExtractor();
+    const output = await extractor(toEmbed, { pooling: "mean", normalize: true });
+    // Batched output is a [n, dims] tensor; tolist() -> array of vectors.
+    const rows =
+      typeof output.tolist === "function"
+        ? output.tolist()
+        : chunk(Array.from(output.data), EMBEDDING_DIMS);
+    keepIdx.forEach((origIndex, k) => {
+      if (rows[k]) out[origIndex] = rows[k];
+    });
+    return out;
+  } catch (error) {
+    console.error(`[embedding] embedMany failed: ${error.message}`);
+    return out;
   }
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 

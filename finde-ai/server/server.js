@@ -11,6 +11,7 @@ import searchRoutes from "./routes/search.routes.js";
 import webRoutes from "./routes/web.routes.js";
 import postsRoutes from "./routes/posts.routes.js";
 import agentRoutes from "./routes/agent.routes.js";
+import { embedText } from "./services/embedding.service.js";
 
 // Load env from the project root regardless of the current working directory.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -244,4 +245,9 @@ app.listen(PORT, () => {
   console.log(`Search endpoint: http://localhost:${PORT}/api/search`);
   console.log(`Web search endpoint: http://localhost:${PORT}/api/web/search`);
   console.log(`Posts ingestion endpoint: http://localhost:${PORT}/api/posts/index`);
+
+  // Warm the embedding model so the first user query isn't slow (cold start).
+  embedText("warmup")
+    .then(() => console.log("Embedding model warmed and ready."))
+    .catch(() => {});
 });

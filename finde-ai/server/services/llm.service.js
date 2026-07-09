@@ -49,9 +49,13 @@ export async function chat(messages, { temperature = 0.2, maxTokens = 600 } = {}
   if (!p) return null;
 
   const model = process.env[p.modelEnv] || p.defaultModel;
+  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 12000);
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(p.url, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${process.env[p.keyEnv]}`,
         "Content-Type": "application/json"
@@ -62,7 +66,7 @@ export async function chat(messages, { temperature = 0.2, maxTokens = 600 } = {}
         temperature,
         max_tokens: maxTokens
       })
-    });
+    }).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
       const body = await res.text();

@@ -38,10 +38,15 @@ export async function rerankResults(query, docs, { topN } = {}) {
 
   const model = process.env.COHERE_RERANK_MODEL || "rerank-v3.5";
   const documents = docs.map(docToText);
+  const timeoutMs = Number(process.env.RERANK_TIMEOUT_MS || 2500);
 
   try {
+    // Cap latency: if Cohere is slow, abort and fall back to fusion ranking.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(COHERE_URL, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json"
@@ -52,7 +57,7 @@ export async function rerankResults(query, docs, { topN } = {}) {
         documents,
         top_n: Math.min(topN || docs.length, docs.length)
       })
-    });
+    }).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
       const body = await res.text();
