@@ -19,12 +19,14 @@ const sandbox = {};
 new Function("globalThis", "module", code)(sandbox, {});
 const { looksLikeRealText } = sandbox.FindEExtract;
 
-// Real junk seen in the user's live capture.
+// Real junk seen in the user's live captures (two different sessions).
 const JUNK = [
   "Facebook",
   "Facebook Facebook Facebook Facebook Facebook Facebook",
   "roendptoSs2ctg8630il9ftggu78i0at001ccl960h0ca09",
   "odetonSrspg21u3u18fua8930tth071f286",
+  "doSnerspotm1m9lgl",
+  "dsooSrpentt7c",
   "Public group",
   "· Follow",
   "See more",
@@ -34,13 +36,16 @@ const JUNK = [
   "AI info"
 ];
 
-// Real posts seen in the same group (English + Bengali + Arabic).
+// Real posts seen in the same groups (English, Bengali, Arabic, bold-unicode).
 const REAL = [
   "We're Hiring – Digital marketing Assistant / Executive #workfromhome apply now with your CV",
   "Sun Life Canada is looking for interns! Apply before the deadline to join the program.",
   "Brain Station 23 is hiring Software Engineer Interns. Batch starts October 2026. Apply with your CV.",
   "আমরা একজন সফটওয়্যার ইঞ্জিনিয়ার ইন্টার্ন নিচ্ছি। আবেদন করুন এখনই আপনার সিভি দিয়ে।",
-  "🚀 فرصة قوية لحديثي التخرج في مجال المبيعات! تقدم الآن مع سيرتك الذاتية اليوم"
+  "🚀 فرصة قوية لحديثي التخرج في مجال المبيعات! تقدم الآن مع سيرتك الذاتية اليوم",
+  "𝐖𝐄’𝐑𝐄 𝐇𝐈𝐑𝐈𝐍𝐆 – 𝐉𝐎𝐈𝐍 𝐎𝐔𝐑 𝐋𝐄𝐀𝐃𝐄𝐑𝐒𝐇𝐈𝐏 𝐓𝐄𝐀𝐌 apply today for the executive role",
+  "২০২৬ সালে MNC-তে চাকরি পাওয়ার প্রথম শর্ত হলো একটি ATS-friendly CV তৈরি করা",
+  "Type: Internship Workplace Location: Mirpur DOHS Joining Date: July 2026 Salary BDT 8000 apply now"
 ];
 
 test("filter drops real Facebook DOM noise", () => {

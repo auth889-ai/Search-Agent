@@ -23,7 +23,7 @@
 
     <nav class="tabs">
       <button class="tab active" data-tab="search">Search</button>
-      <button class="tab" data-tab="index">Index posts</button>
+      <button class="tab" data-tab="index">Find on page</button>
     </nav>
 
     <!-- SEARCH TAB -->
@@ -55,12 +55,25 @@
     <!-- INDEX TAB -->
     <section class="panel" id="panel-index">
       <p class="index-intro">
-        Read the posts <strong>currently visible</strong> on this Facebook /
-        LinkedIn tab and add them to your searchable community memory.
+        Stop infinite scrolling. Read the posts <strong>visible</strong> on this
+        Facebook / LinkedIn tab, then ask — in <strong>any language</strong> — what
+        you want. AI finds the best-matching posts with a fit score.
       </p>
       <button id="readBtn" class="primary-btn wide">Read visible posts</button>
       <div id="capturePreview" class="capture-preview"></div>
-      <button id="indexBtn" class="primary-btn wide hidden">Index posts</button>
+
+      <div class="match-box hidden" id="matchBox">
+        <input
+          id="matchInput"
+          type="text"
+          placeholder="What post do you want? (any language)"
+          autocomplete="off"
+        />
+        <button id="matchBtn" class="primary-btn">Find</button>
+      </div>
+      <div id="matchResults" class="results"></div>
+
+      <button id="indexBtn" class="primary-btn wide hidden">Save to memory</button>
       <div id="indexResult" class="index-result"></div>
 
       <div class="safety-note">

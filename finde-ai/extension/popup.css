@@ -302,6 +302,30 @@ body {
   margin-top: 12px;
 }
 .index-result { margin-top: 10px; font-size: 12px; }
+/* Match on captured posts */
+.match-box { display: flex; gap: 8px; margin-top: 14px; }
+.match-box input {
+  flex: 1; padding: 11px 13px; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface); font-size: 13px; outline: none;
+}
+.match-box input:focus { border-color: var(--indigo); }
+.match-meta { font-size: 11px; color: var(--ink-soft); margin: 12px 0 8px; font-weight: 600; }
+.match-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); margin-bottom: 9px;
+}
+.match-head { display: flex; gap: 10px; align-items: flex-start; }
+.match-fit {
+  flex: 0 0 auto; color: #fff; font-size: 12px; font-weight: 800;
+  padding: 4px 8px; border-radius: 9px; min-width: 40px; text-align: center;
+}
+.match-text { font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.match-reason {
+  font-size: 11.5px; color: #4a4a4f; margin-top: 8px; line-height: 1.4;
+  background: rgba(91, 75, 232, 0.06); padding: 7px 9px; border-radius: 9px;
+}
+.match-card .result-link { display: inline-block; margin-top: 8px; }
+
 .safety-note {
   margin-top: 16px;
   display: flex;

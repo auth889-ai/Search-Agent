@@ -135,34 +135,100 @@ async function runSearch() {
   }
 }
 
-/* ---------- index visible posts ---------- */
+/* ---------- read visible posts (injected on-demand, no tab reload needed) ---------- */
+
+// This function is serialized and executed INSIDE the Facebook page, so it must
+// be fully self-contained (no external references). It scans every post-text
+// block on the page (Facebook doesn't wrap every post in a clean article).
+function pageExtractPosts() {
+  const MAX_POSTS = 60;
+  const UI_NOISE = new RegExp(
+    "^(see more|see translation|see original|all reactions?|like|love|haha|wow|" +
+      "comment|comments|share|shares|follow|following|reply|replies|active now|" +
+      "write a comment|view more comments|most relevant|top fan|author|admin|" +
+      "moderator|suggested for you|sponsored|· follow|public group|private group|" +
+      "join|joined|members|facebook|see original|reels|shop now|learn more)$",
+    "i"
+  );
+  // Group-recommendation cards (not real posts): "Public · 37K members · 70+ posts a day".
+  const GROUP_CARD = /(\d[\d.,]*\s*(k|m)?\+?\s*members|posts a day|·\s*(public|private)\b|(public|private)\s*·)/i;
+  const clean = (v) => String(v || "").replace(/\s+/g, " ").trim();
+
+  const real = (t) => {
+    if (!t || t.length < 25) return false;
+    if (UI_NOISE.test(t)) return false;
+    const words = t.split(/\s+/).filter((w) => w.length > 1);
+    if (words.length < 5) return false;
+    const letters = (t.match(/\p{L}/gu) || []).length;
+    if (letters / t.length < 0.4) return false;
+    const uniq = new Set(words.map((w) => w.toLowerCase()));
+    if (uniq.size <= 2 && words.length > 4) return false;
+    return true;
+  };
+
+  const groupName = clean(document.title).replace(/\s*[|·].*$/i, "") || "Community";
+  const blocks = Array.from(document.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
+  const seen = new Set();
+  const posts = [];
+
+  for (const b of blocks) {
+    if (posts.length >= MAX_POSTS) break;
+    // Only leaf text blocks (skip wrappers that contain other dir=auto blocks).
+    if (b.querySelector('div[dir="auto"], span[dir="auto"]')) continue;
+
+    const t = clean(b.innerText || b.textContent).replace(/\s*See (more|translation|original)\s*$/i, "");
+    if (!real(t)) continue;
+    // Skip group cards / recommendations (not real posts).
+    if (GROUP_CARD.test(t)) continue;
+
+    const key = t.slice(0, 100).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    let url = "";
+    const scope = b.closest('[role="article"]') || b.parentElement?.parentElement || document;
+    const link = scope.querySelector &&
+      scope.querySelector('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"], a[href*="/groups/"]');
+    if (link) url = (link.href || "").split("?")[0];
+
+    posts.push({ text: t, url, groupName, platform: "facebook", captureMode: "user_clicked_visible_posts" });
+  }
+  return { posts, articleCount: document.querySelectorAll('[role="article"]').length };
+}
+
 async function readVisiblePosts() {
   const preview = $("capturePreview");
   const indexBtn = $("indexBtn");
+  const matchBox = $("matchBox");
   const result = $("indexResult");
   result.innerHTML = "";
+  $("matchResults").innerHTML = "";
   preview.innerHTML = `<div class="loading">Reading visible posts…</div>`;
   indexBtn.classList.add("hidden");
+  matchBox.classList.add("hidden");
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !/facebook\.com|linkedin\.com/.test(tab.url || "")) {
-      preview.innerHTML = `<div class="error-box">Open a Facebook or LinkedIn page first, then try again.</div>`;
+      preview.innerHTML = `<div class="error-box">Open a Facebook or LinkedIn group first, then try again.</div>`;
       return;
     }
 
-    const response = await chrome.tabs.sendMessage(tab.id, {
-      type: "FINDE_EXTRACT_POSTS"
+    // Inject the extractor on demand — works even if the tab was already open.
+    const [injection] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: pageExtractPosts
     });
+    const out = injection?.result || { posts: [], articleCount: 0 };
+    capturedPosts = out.posts || [];
 
-    capturedPosts = response?.posts || [];
     if (!capturedPosts.length) {
-      preview.innerHTML = `<div class="empty">No visible posts found. Scroll so posts are on screen, then try again.</div>`;
+      preview.innerHTML = `<div class="empty">Found ${out.articleCount} post block(s) but no readable text yet. Scroll so full posts (with text) are on screen, then try again.</div>`;
       return;
     }
 
     preview.innerHTML = "";
-    capturedPosts.slice(0, 5).forEach((p) => {
+    capturedPosts.slice(0, 4).forEach((p) => {
       const el = document.createElement("div");
       el.className = "capture-item";
       el.textContent = p.text.slice(0, 130) + (p.text.length > 130 ? "…" : "");
@@ -170,13 +236,56 @@ async function readVisiblePosts() {
     });
     const count = document.createElement("div");
     count.className = "capture-count";
-    count.textContent = `${capturedPosts.length} visible post(s) ready to index`;
+    count.textContent = `✅ Captured ${capturedPosts.length} post(s). Now ask what you want:`;
     preview.appendChild(count);
 
-    indexBtn.textContent = `Index ${capturedPosts.length} post(s)`;
+    matchBox.classList.remove("hidden");
+    $("matchInput").focus();
+    indexBtn.textContent = `Save ${capturedPosts.length} to memory`;
     indexBtn.classList.remove("hidden");
   } catch (error) {
-    preview.innerHTML = `<div class="error-box">Could not read the page: ${escapeHtml(error.message)}. Reload the Facebook tab and retry.</div>`;
+    preview.innerHTML = `<div class="error-box">Could not read the page: ${escapeHtml(error.message)}.<br/>Make sure you're on a Facebook group tab and try again.</div>`;
+  }
+}
+
+/* ---------- LLM match on captured posts (the core flow) ---------- */
+async function matchInCaptured() {
+  const query = $("matchInput").value.trim();
+  if (!query || !capturedPosts.length) return;
+  const wrap = $("matchResults");
+  const btn = $("matchBtn");
+  btn.disabled = true;
+  wrap.innerHTML = `<div class="loading">Finding your post…</div>`;
+  try {
+    const data = await apiFetch("/api/match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, posts: capturedPosts, limit: 10 })
+    });
+    if (!data.results.length) {
+      wrap.innerHTML = `<div class="empty">No matching post among the ${data.scanned} captured. Scroll for more posts and read again.</div>`;
+      return;
+    }
+    wrap.innerHTML =
+      `<div class="match-meta">${data.count} match(es) · ${data.mode === "llm" ? "AI ranked" : "semantic"}</div>` +
+      data.results
+        .map((r) => {
+          const fit = r.fitScore ?? 0;
+          const color = fitColor(fit);
+          return `<div class="match-card">
+            <div class="match-head">
+              <span class="match-fit" style="background:${color}">${fit}%</span>
+              <div class="match-text">${escapeHtml(r.text)}</div>
+            </div>
+            ${r.llmReason ? `<div class="match-reason">💡 ${escapeHtml(r.llmReason)}</div>` : ""}
+            ${r.url ? `<a class="result-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">Open post ↗</a>` : ""}
+          </div>`;
+        })
+        .join("");
+  } catch (error) {
+    wrap.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -237,6 +346,10 @@ async function init() {
   });
   $("readBtn").addEventListener("click", readVisiblePosts);
   $("indexBtn").addEventListener("click", indexPosts);
+  $("matchBtn").addEventListener("click", matchInCaptured);
+  $("matchInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") matchInCaptured();
+  });
   $("apiBaseInput").addEventListener("change", async (e) => {
     apiBase = e.target.value.trim().replace(/\/$/, "") || DEFAULT_API;
     await chrome.storage.local.set({ apiBase });
