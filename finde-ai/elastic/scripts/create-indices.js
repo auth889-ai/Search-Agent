@@ -27,6 +27,23 @@ const commonAnalysis = {
   }
 };
 
+// Bilingual corpus: every searchable text field gets language-aware subfields.
+// ES ships a built-in `bengali` analyzer (indic + bengali normalization,
+// stemmer, stopwords) and an `english` analyzer (porter stemming, stopwords).
+// BM25 queries hit base + .bn + .en so "internships" matches "internship" and
+// Bengali morphology actually tokenizes — the standard analyzer alone does
+// neither. (Fields are additive: recreate indices + reindex to activate.)
+const langFields = {
+  bn: { type: "text", analyzer: "bengali" },
+  en: { type: "text", analyzer: "english" }
+};
+
+const multilingualText = {
+  type: "text",
+  analyzer: "finde_text_analyzer",
+  fields: langFields
+};
+
 const baseProperties = {
   docId: { type: "keyword" },
   sourceType: { type: "keyword" },
@@ -34,17 +51,12 @@ const baseProperties = {
     type: "text",
     analyzer: "finde_text_analyzer",
     fields: {
-      keyword: { type: "keyword", ignore_above: 256 }
+      keyword: { type: "keyword", ignore_above: 256 },
+      ...langFields
     }
   },
-  text: {
-    type: "text",
-    analyzer: "finde_text_analyzer"
-  },
-  snippet: {
-    type: "text",
-    analyzer: "finde_text_analyzer"
-  },
+  text: multilingualText,
+  snippet: multilingualText,
   url: { type: "keyword" },
   date: { type: "date", ignore_malformed: true },
   indexedAt: { type: "date" },
@@ -66,10 +78,7 @@ const baseProperties = {
       trustScore: { type: "float" }
     }
   },
-  embeddingText: {
-    type: "text",
-    analyzer: "finde_text_analyzer"
-  },
+  embeddingText: multilingualText,
   // Semantic vector for NLP fit-scoring (all-MiniLM-L6-v2 => 384 dims, cosine).
   embedding: {
     type: "dense_vector",
@@ -94,10 +103,7 @@ const indexDefinitions = [
           ...baseProperties,
           groupName: { type: "keyword" },
           authorDisplay: { type: "keyword" },
-          comments: {
-            type: "text",
-            analyzer: "finde_text_analyzer"
-          },
+          comments: multilingualText,
           platform: { type: "keyword" },
           visibleCaptureOnly: { type: "boolean" }
         }

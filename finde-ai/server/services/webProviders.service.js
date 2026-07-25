@@ -136,6 +136,21 @@ function normalizeWebResult({ provider, query, item, index }) {
     `${title} ${content}`
   );
 
+  // Only trust a REAL publish date from the provider; never invent one.
+  // Unknown date => date:null + neutral freshness, so a 2019 page can't
+  // masquerade as published-today and outrank genuinely fresh posts.
+  const providerDate = cleanText(item.published_date || item.publishedDate || item.date);
+  const parsedDate =
+    providerDate && !Number.isNaN(Date.parse(providerDate))
+      ? new Date(providerDate).toISOString()
+      : null;
+  const freshnessScore = parsedDate
+    ? Math.max(
+        0.3,
+        Math.min(1, 1 - (Date.now() - Date.parse(parsedDate)) / (1000 * 60 * 60 * 24 * 365))
+      )
+    : 0.6;
+
   return {
     docId: `web_${provider}_${Buffer.from(url || `${title}-${index}`).toString("base64url").slice(0, 40)}`,
     sourceType: domainTrust.sourceOfficial ? "official_web" : "trusted_web",
@@ -146,7 +161,7 @@ function normalizeWebResult({ provider, query, item, index }) {
     text: content,
     snippet: content.slice(0, 500),
     url,
-    date: now,
+    date: parsedDate,
     indexedAt: now,
     topics,
     tags: [provider, "web-search", domainTrust.sourceOfficial ? "official-like" : "web-result"],
@@ -161,11 +176,11 @@ function normalizeWebResult({ provider, query, item, index }) {
       hasDeadline,
       commentCount: 0,
       reactionCount: 0,
-      freshnessScore: 0.84,
+      freshnessScore,
       trustScore: domainTrust.trustScore
     },
-    confidence: Math.min(98, Math.round((domainTrust.trustScore + 0.84) * 50)),
-    finalScore: domainTrust.trustScore + 0.84
+    confidence: Math.min(98, Math.round((domainTrust.trustScore + freshnessScore) * 50)),
+    finalScore: domainTrust.trustScore + freshnessScore
   };
 }
 

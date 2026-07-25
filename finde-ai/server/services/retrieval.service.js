@@ -16,7 +16,8 @@
  * this as the final precision pass in the agent.
  */
 import { Client } from "@elastic/elasticsearch";
-import { embedMany, cosineSimilarity } from "./embedding.service.js";
+import { embedText, embedMany, cosineSimilarity } from "./embedding.service.js";
+import { understandQuery } from "./queryUnderstanding.service.js";
 
 const ELASTICSEARCH_NODE = process.env.ELASTICSEARCH_NODE || "http://localhost:9200";
 const elastic = new Client({ node: ELASTICSEARCH_NODE });
@@ -27,14 +28,25 @@ const MMR_LAMBDA = Number(process.env.MMR_LAMBDA || 0.7);
 const WEIGHT_KNN = 1.1;
 const WEIGHT_BM25 = 1.0;
 
+// Language-aware subfields (.bn = built-in bengali analyzer with stemming +
+// indic normalization, .en = english analyzer with porter stemming) sit just
+// below their exact-match parent so stemmed matches count but exact wins.
+// multi_match silently skips unmapped fields, so this stays safe on indices
+// created before the multilingual mapping existed.
 const BM25_FIELDS = [
   "title^5",
+  "title.en^4",
+  "title.bn^4",
   "topics^4",
   "tags^3",
   "text^2",
+  "text.en^1.8",
+  "text.bn^1.8",
   "comments^2",
   "snippet^2",
   "embeddingText^2",
+  "embeddingText.en^1.8",
+  "embeddingText.bn^1.8",
   "groupName^1.5",
   "siteName^1.5",
   "domain"
@@ -50,24 +62,44 @@ const INTENT_TERMS = {
   general_search: ""
 };
 
-export function buildQueryVariants(query, intent) {
+export function buildQueryVariants(query, intent, understanding = null) {
   const base = String(query || "").trim();
   const variants = [{ text: base, kind: "original" }];
+  const seen = new Set([base.toLowerCase()]);
 
-  const extra = INTENT_TERMS[intent] || "";
-  if (extra) variants.push({ text: `${base} ${extra}`, kind: "intent_expanded" });
+  const push = (text, kind) => {
+    const t = String(text || "").trim();
+    if (!t || seen.has(t.toLowerCase())) return;
+    seen.add(t.toLowerCase());
+    variants.push({ text: t, kind });
+  };
 
-  // A lexical-focused variant: keep only the content words (helps BM25 recall).
-  const content = base
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 3);
-  if (content.length >= 3) {
-    variants.push({ text: content.join(" "), kind: "keywords" });
+  // LLM understanding (best): cross-language translations + keyword rewrite.
+  // These let a Bengali query hit English posts (and vice versa) in BOTH the
+  // BM25 and the vector lists.
+  if (understanding) {
+    // Sub-queries first: for compound asks each separable need gets its own
+    // retrieval leg, which fusion then merges (query decomposition).
+    (understanding.subQueries || []).forEach((sq, i) => push(sq, `llm_sub${i + 1}`));
+    push(understanding.english, "llm_english");
+    push(understanding.bengali, "llm_bengali");
+    push(understanding.keywords, "llm_keywords");
   }
 
-  return variants.slice(0, 3);
+  // Heuristic fallback expansion (English keyword lists) when no LLM.
+  if (variants.length === 1) {
+    const extra = INTENT_TERMS[intent] || "";
+    if (extra) push(`${base} ${extra}`, "intent_expanded");
+
+    const content = base
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    if (content.length >= 3) push(content.join(" "), "keywords");
+  }
+
+  return variants.slice(0, 5);
 }
 
 /* -------- 2. Per-query search bodies -------- */
@@ -113,16 +145,26 @@ function knnSearch(vector, indexes, size, filters) {
   });
 }
 
-/* -------- 3. Weighted Reciprocal Rank Fusion -------- */
+/* -------- 3. Weighted Reciprocal Rank Fusion --------
+ * Chunked posts collapse to their parent: all chunk hits of one post count as
+ * a single candidate keyed by parentDocId, and within one ranked list only the
+ * post's BEST rank contributes (so a 5-chunk post can't stack 5 contributions
+ * from the same list and crowd out other posts).
+ */
 function rrfFuse(lists) {
   const agg = new Map();
   for (const list of lists) {
     const isBm25 = list.kind.startsWith("bm25");
+    const seenInList = new Set();
     list.hits.forEach((hit, rank) => {
+      const key = hit.source?.parentDocId || hit.id;
+      if (seenInList.has(key)) return;
+      seenInList.add(key);
+
       const contribution = list.weight * (1 / (RRF_K + rank + 1));
       const cur =
-        agg.get(hit.id) || {
-          id: hit.id,
+        agg.get(key) || {
+          id: key,
           index: hit.index,
           source: hit.source,
           rrf: 0,
@@ -134,11 +176,28 @@ function rrfFuse(lists) {
       cur.hitBy.add(list.kind);
       if (isBm25) cur.bm25Rank = cur.bm25Rank == null ? rank : Math.min(cur.bm25Rank, rank);
       else cur.knnRank = cur.knnRank == null ? rank : Math.min(cur.knnRank, rank);
-      // Prefer a copy of the source that carries the embedding (for MMR).
-      if (!Array.isArray(cur.source?.embedding) && Array.isArray(hit.source?.embedding)) {
-        cur.source = hit.source;
+      // Remember the best-ranked CHUNK hit for this post: a query matching
+      // chunk 5 of a long post must be scored against chunk 5's vector, not
+      // the parent's (which only covers the opening). Rank order within a
+      // list is best-first, so the first chunk seen from a kNN list wins.
+      if (
+        hit.source?.isChunk &&
+        Array.isArray(hit.source.embedding) &&
+        (!cur.bestChunk || (!isBm25 && cur.bestChunk.fromBm25))
+      ) {
+        cur.bestChunk = {
+          embedding: hit.source.embedding,
+          text: hit.source.text || hit.source.embeddingText || "",
+          fromBm25: isBm25
+        };
       }
-      agg.set(hit.id, cur);
+      // Prefer the parent (non-chunk) copy of the source, and one that carries
+      // an embedding (needed for MMR / semantic fit).
+      const upgrade =
+        (cur.source?.isChunk && hit.source && !hit.source.isChunk) ||
+        (!Array.isArray(cur.source?.embedding) && Array.isArray(hit.source?.embedding));
+      if (upgrade) cur.source = hit.source;
+      agg.set(key, cur);
     });
   }
   return [...agg.values()].sort((a, b) => b.rrf - a.rrf);
@@ -182,16 +241,30 @@ function mmr(candidates, queryVector, limit) {
 
 /* -------- Orchestrator -------- */
 export async function advancedRetrieve({ query, indexes, size, filters = [], intent }) {
-  const variants = buildQueryVariants(query, intent);
-  const vectors = await embedMany(variants.map((v) => v.text));
-  const queryVector = vectors[0];
+  // Kick off the slow LLM understanding call and the fast original-query work
+  // AT THE SAME TIME. The first BM25+kNN wave hits Elasticsearch while the LLM
+  // (up to 3.5s) is still thinking, so a slow/absent LLM no longer delays
+  // retrieval start.
+  const understandingPromise = understandQuery(query).catch(() => null);
+  const queryVector = await embedText(query, "query");
 
-  // Fire BM25 for every variant, kNN for every variant that embedded.
-  const jobs = [];
-  variants.forEach((v, i) => {
+  const jobs = [
+    { kind: "bm25:original", weight: WEIGHT_BM25, run: bm25Search(query, indexes, size * 2, filters) }
+  ];
+  if (queryVector) {
+    jobs.push({ kind: "knn:original", weight: WEIGHT_KNN, run: knnSearch(queryVector, indexes, size * 2, filters) });
+  }
+
+  // Second wave: LLM-derived variants (translations, keyword rewrites).
+  const understanding = await understandingPromise;
+  const variants = buildQueryVariants(query, intent, understanding);
+  const extraVariants = variants.slice(1); // original already in flight
+  const extraVectors = await embedMany(extraVariants.map((v) => v.text), "query");
+
+  extraVariants.forEach((v, i) => {
     jobs.push({ kind: `bm25:${v.kind}`, weight: WEIGHT_BM25, run: bm25Search(v.text, indexes, size * 2, filters) });
-    if (vectors[i]) {
-      jobs.push({ kind: `knn:${v.kind}`, weight: WEIGHT_KNN, run: knnSearch(vectors[i], indexes, size * 2, filters) });
+    if (extraVectors[i]) {
+      jobs.push({ kind: `knn:${v.kind}`, weight: WEIGHT_KNN, run: knnSearch(extraVectors[i], indexes, size * 2, filters) });
     }
   });
 
@@ -221,6 +294,9 @@ export async function advancedRetrieve({ query, indexes, size, filters = [], int
     queryVector,
     candidates: diversified,
     plan: {
+      queryLanguage: understanding?.language || null,
+      llmIntent: understanding?.intent || null,
+      llmQueryUnderstanding: Boolean(understanding),
       variants: variants.map((v) => v.kind),
       lists: lists.map((l) => l.kind),
       fusion: `weighted_rrf(k=${RRF_K})`,

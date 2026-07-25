@@ -14,13 +14,24 @@ import { pipeline, env } from "@xenova/transformers";
 env.allowLocalModels = true;
 env.useBrowserCache = false;
 
-// Multilingual sentence-transformer (50+ languages incl. Bengali, Arabic, Hindi,
-// Urdu, French...). Lets people search in ANY language and match posts written
-// in another. Local, free, no API key. 384-dim (same ES mapping).
+// Multilingual RETRIEVAL model (100 languages incl. Bengali, Arabic, Hindi,
+// Urdu, French...). multilingual-e5 is trained specifically for asymmetric
+// search (short query vs long passage) — much stronger than paraphrase-MiniLM
+// for "find the post that answers this" — and is still local, free, 384-dim
+// (same ES mapping). IMPORTANT: after changing the model, re-embed stored docs:
+//   cd elastic && node scripts/reembed.js
 export const EMBEDDING_MODEL =
-  process.env.EMBEDDING_MODEL || "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+  process.env.EMBEDDING_MODEL || "Xenova/multilingual-e5-small";
 export const EMBEDDING_DIMS = 384;
 export const MAX_EMBED_CHARS = 4000;
+
+// E5-family models REQUIRE role prefixes; without them quality drops sharply.
+const IS_E5 = /(^|\/)(multilingual-)?e5/i.test(EMBEDDING_MODEL);
+
+function rolePrefix(kind) {
+  if (!IS_E5) return "";
+  return kind === "passage" ? "passage: " : "query: ";
+}
 
 let extractorPromise = null;
 
@@ -46,15 +57,20 @@ async function getExtractor() {
 
 /**
  * Embed a single string into a 384-dim normalized vector.
+ * `kind` is "query" (a user search) or "passage" (a stored document) — E5
+ * models are asymmetric and need to know which side they are embedding.
  * Returns null on empty input or if the model is unavailable.
  */
-export async function embedText(text) {
+export async function embedText(text, kind = "query") {
   const clean = cleanForEmbedding(text);
   if (!clean) return null;
 
   try {
     const extractor = await getExtractor();
-    const output = await extractor(clean, { pooling: "mean", normalize: true });
+    const output = await extractor(rolePrefix(kind) + clean, {
+      pooling: "mean",
+      normalize: true
+    });
     return Array.from(output.data);
   } catch (error) {
     console.error(`[embedding] embedText failed: ${error.message}`);
@@ -66,7 +82,7 @@ export async function embedText(text) {
  * Embed many strings in a SINGLE batched model pass (much faster than looping).
  * Returns an array aligned with input (null where the text was empty/failed).
  */
-export async function embedMany(texts = []) {
+export async function embedMany(texts = [], kind = "query") {
   const out = new Array(texts.length).fill(null);
   const keepIdx = [];
   const toEmbed = [];
@@ -74,7 +90,7 @@ export async function embedMany(texts = []) {
     const c = cleanForEmbedding(t);
     if (c) {
       keepIdx.push(i);
-      toEmbed.push(c);
+      toEmbed.push(rolePrefix(kind) + c);
     }
   });
   if (!toEmbed.length) return out;
@@ -112,16 +128,21 @@ export async function attachEmbedding(doc = {}) {
     doc.embeddingText ||
     [doc.title, doc.text, doc.snippet].filter(Boolean).join("\n");
 
-  const vector = await embedText(source);
+  const vector = await embedText(source, "passage");
   if (vector) doc.embedding = vector;
   return doc;
 }
 
 export async function attachEmbeddings(docs = []) {
-  for (const doc of docs) {
-    // eslint-disable-next-line no-await-in-loop
-    await attachEmbedding(doc);
-  }
+  const texts = docs.map(
+    (doc) =>
+      doc.embeddingText ||
+      [doc.title, doc.text, doc.snippet].filter(Boolean).join("\n")
+  );
+  const vectors = await embedMany(texts, "passage");
+  docs.forEach((doc, i) => {
+    if (vectors[i]) doc.embedding = vectors[i];
+  });
   return docs;
 }
 
@@ -131,6 +152,18 @@ export function cosineSimilarity(a, b) {
   let dot = 0;
   for (let i = 0; i < a.length; i += 1) dot += a[i] * b[i];
   return dot;
+}
+
+// E5 cosines are compressed into roughly [0.72, 0.92] (unrelated text still
+// scores ~0.77, measured on Bengali/English post pairs). Rescale to a
+// human-meaningful 0..1 "semantic fit" so 70% really means strong match and
+// junk lands under ~20%. Non-E5 models keep the raw cosine.
+const SIM_FLOOR = IS_E5 ? 0.76 : 0;
+const SIM_CEIL = IS_E5 ? 0.9 : 1;
+
+export function normalizeSimilarity(sim) {
+  const v = (Number(sim) - SIM_FLOOR) / (SIM_CEIL - SIM_FLOOR);
+  return Math.max(0, Math.min(1, v));
 }
 
 /** Warm the model and report whether embeddings are available. */

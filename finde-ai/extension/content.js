@@ -24,8 +24,9 @@
   if (globalThis.__FINDE_CONTENT_ACTIVE__) return;
   globalThis.__FINDE_CONTENT_ACTIVE__ = true;
 
-  const MAX_POSTS = 40;
-  const { cleanText, looksLikeRealText, stripTrailingUi, UI_NOISE } = globalThis.FindEExtract;
+  const MAX_POSTS = 60;
+  const { cleanText, looksLikeRealText, stripTrailingUi, UI_NOISE, parsePostTimestamp } =
+    globalThis.FindEExtract;
 
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
@@ -34,6 +35,8 @@
     if (style.display === "none" || style.visibility === "hidden") return false;
     return rect.bottom > 0 && rect.top < window.innerHeight + rect.height;
   }
+
+  const MAX_POST_CHARS = 6000;
 
   // Extract the post message from a Facebook article by reading dir="auto" blocks.
   function extractMessage(article) {
@@ -44,6 +47,9 @@
     for (const b of blocks) {
       // Skip container blocks that wrap other dir=auto blocks (avoids duplicates).
       if (b.querySelector('div[dir="auto"], span[dir="auto"]')) continue;
+      // Skip text living inside a NESTED article (comments render as articles
+      // inside the post article) — otherwise comment text pollutes the post.
+      if (b.closest('[role="article"]') !== article) continue;
 
       const t = stripTrailingUi(b.innerText || b.textContent);
       if (!looksLikeRealText(t)) continue;
@@ -55,15 +61,43 @@
     }
 
     if (!candidates.length) return "";
-    // The post body is almost always the longest genuine block.
-    candidates.sort((a, b) => b.length - a.length);
-    return candidates[0];
+    // Keep ALL genuine paragraphs in reading order — multi-paragraph posts
+    // (requirements, deadlines, contact info) used to lose everything except
+    // their single longest block, which crippled search quality.
+    return candidates.join("\n").slice(0, MAX_POST_CHARS);
   }
 
   function extractAuthor(article) {
     const el = article.querySelector('h2 a, h3 a, h4 a, strong a, a[role="link"] strong');
     const name = cleanText(el?.textContent || "");
     return name && name.length <= 60 && !UI_NOISE.test(name) ? name : "";
+  }
+
+  // Best-effort real post date. Sources in order of reliability:
+  // <time datetime>, <abbr data-utime> (epoch), then short timestamp labels
+  // ("2d", "5 hrs", "Yesterday", "June 5", "২ দিন") on links near the header.
+  function findPostDate(article) {
+    const timeEl = article.querySelector("time[datetime]");
+    if (timeEl) {
+      const parsed = new Date(timeEl.getAttribute("datetime"));
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+
+    const abbr = article.querySelector("abbr[data-utime]");
+    if (abbr) {
+      const epoch = Number(abbr.getAttribute("data-utime"));
+      if (epoch > 0) return new Date(epoch * 1000).toISOString();
+    }
+
+    const links = Array.from(article.querySelectorAll('a[role="link"], a[href]')).slice(0, 30);
+    for (const link of links) {
+      const label = cleanText(link.getAttribute("aria-label") || link.innerText || "");
+      if (!label || label.length > 40) continue;
+      const parsed = parsePostTimestamp(label, Date.now());
+      if (parsed) return parsed;
+    }
+
+    return "";
   }
 
   function findPermalink(article) {
@@ -98,10 +132,12 @@
       if (seen.has(key)) continue;
       seen.add(key);
 
+      const date = findPostDate(article);
       posts.push({
         text,
         authorDisplay: extractAuthor(article),
         url: findPermalink(article),
+        ...(date ? { date, dateSource: "post_timestamp" } : {}),
         pageUrl,
         groupName,
         platform,

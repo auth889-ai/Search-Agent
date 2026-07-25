@@ -1,0 +1,189 @@
+{
+  "description": "Golden evaluation set for FindE AI. `posts` is a self-contained bilingual corpus (with distractors); `queries` map real user asks to the docIds that SHOULD be found. Run: node eval/eval.js",
+  "posts": [
+    {
+      "docId": "eval_intern_react_remote",
+      "text": "We are hiring paid remote frontend interns for Summer 2026. Must know React, Tailwind and Git. Stipend 15000 BDT per month. Apply by July 30 with your portfolio.",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/1001",
+      "date": "2026-07-05T10:00:00.000Z"
+    },
+    {
+      "docId": "eval_intern_bn_remote",
+      "text": "আমাদের স্টার্টআপে সফটওয়্যার ইঞ্জিনিয়ার ইন্টার্ন নিচ্ছি। কাজটি সম্পূর্ণ রিমোট এবং বেতনসহ। Node.js জানা থাকলে অগ্রাধিকার। আগ্রহীরা সিভি পাঠান আগামী সপ্তাহের মধ্যে।",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/1002",
+      "date": "2026-07-08T09:00:00.000Z"
+    },
+    {
+      "docId": "eval_intern_onsite_unpaid",
+      "text": "Unpaid onsite internship opportunity at our Banani office for marketing students. Certificate provided after 3 months. Lunch included.",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/1003"
+    },
+    {
+      "docId": "eval_job_senior_java",
+      "text": "Hiring senior Java backend engineer, 5+ years experience with Spring Boot and Kafka. Onsite Gulshan, competitive salary. This is NOT an internship position.",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/1004"
+    },
+    {
+      "docId": "eval_scholarship_germany",
+      "text": "Fully funded DAAD masters scholarship in Germany for CSE graduates. Covers tuition and 934 euro monthly stipend. IELTS 6.5 required. Deadline: August 15, 2026. Official link in comments.",
+      "groupName": "Study Abroad BD",
+      "url": "https://facebook.com/groups/studyabroad/posts/2001",
+      "date": "2026-06-25T12:00:00.000Z"
+    },
+    {
+      "docId": "eval_scholarship_japan_bn",
+      "text": "জাপানে MEXT স্কলারশিপের সার্কুলার দিয়েছে। মাস্টার্স এবং পিএইচডি দুটোতেই আবেদন করা যাবে, টিউশন ফ্রি এবং মাসিক ভাতা আছে। আবেদনের শেষ তারিখ আগস্টের শেষ সপ্তাহ। বিস্তারিত এমব্যাসির ওয়েবসাইটে।",
+      "groupName": "Study Abroad BD",
+      "url": "https://facebook.com/groups/studyabroad/posts/2002"
+    },
+    {
+      "docId": "eval_scholarship_undergrad_local",
+      "text": "Local undergraduate merit scholarship for HSC 2025 batch, covers 50% tuition at private universities in Dhaka. GPA 5.00 required.",
+      "groupName": "Study Abroad BD",
+      "url": "https://facebook.com/groups/studyabroad/posts/2003"
+    },
+    {
+      "docId": "eval_research_ids_ml",
+      "text": "Looking for a final year thesis idea? Network intrusion detection with machine learning is beginner friendly: use the CICIDS2017 dataset, start with a random forest baseline, then compare with a small neural network. Plenty of papers to cite and the dataset is free.",
+      "groupName": "CSE Research Helpline",
+      "url": "https://facebook.com/groups/research/posts/3001"
+    },
+    {
+      "docId": "eval_research_nlp_bangla",
+      "text": "Research idea for Bangla NLP: sentiment analysis of Bangla social media comments. Datasets: SentNoB and BanglaBook. Fine-tune BanglaBERT for a strong baseline. Good scope for a conference paper.",
+      "groupName": "CSE Research Helpline",
+      "url": "https://facebook.com/groups/research/posts/3002"
+    },
+    {
+      "docId": "eval_coding_mongo_atlas",
+      "text": "If you get MongooseServerSelectionError when connecting Node.js to MongoDB Atlas, whitelist your IP in Atlas Network Access, check the connection string password does not contain unescaped special characters, and make sure dotenv loads before mongoose.connect. Fixed it for me.",
+      "groupName": "Node BD Devs",
+      "url": "https://facebook.com/groups/nodebd/posts/4001"
+    },
+    {
+      "docId": "eval_coding_react_cors",
+      "text": "CORS error when calling your Express API from React on localhost:3000? Install the cors package and app.use(cors({origin:'http://localhost:3000'})) BEFORE your routes. If you use cookies set credentials true on both sides.",
+      "groupName": "Node BD Devs",
+      "url": "https://facebook.com/groups/nodebd/posts/4002"
+    },
+    {
+      "docId": "eval_rent_dhanmondi",
+      "text": "Room available for rent near Dhanmondi 27 from August 1. Two roommates needed, 5500 taka per person including wifi and gas. Students preferred, no smoking.",
+      "groupName": "Dhaka Flat & Roommate",
+      "url": "https://facebook.com/groups/rent/posts/5001"
+    },
+    {
+      "docId": "eval_rent_mirpur_bn",
+      "text": "মিরপুর ১০ নম্বরে সাবলেট দেওয়া হবে সেপ্টেম্বর থেকে। ব্যাচেলর ছাত্রদের জন্য, ভাড়া মাসে ৬০০০ টাকা, ওয়াইফাই সহ। আগ্রহী হলে ইনবক্স করুন।",
+      "groupName": "Dhaka Flat & Roommate",
+      "url": "https://facebook.com/groups/rent/posts/5002"
+    },
+    {
+      "docId": "eval_long_hackathon_rules",
+      "text": "National AI Hackathon 2026 — full rules and eligibility, please read before asking.\nTeams of 2-4 members, all must be current university students in Bangladesh. Cross-university teams are allowed. Each team submits one project only.\nRound 1 is online: submit a 3-minute demo video and a public GitHub repository by September 10, 2026. Judges score problem clarity, technical depth, and completeness of the working demo. Fifty teams advance.\nRound 2 is onsite in Dhaka on October 3-4, 2026 at the ICT Tower. Teams get 24 hours, food and workspace provided, hardware must be your own. Internet is provided but rate limited, so cache your dependencies.\nJudging criteria for the final: 30 percent innovation, 30 percent working demo, 20 percent business viability, 20 percent presentation. Using pretrained models is allowed but you must disclose them; plagiarized projects are disqualified permanently.\nPrizes: champion 500000 taka, first runner-up 300000, second runner-up 150000, plus category awards for best AI-for-good and best student startup. Winners also get incubation support from the organizers for six months.\nRegistration is free and closes August 25, 2026 at 11:59 PM. Register on the official website, one form per team. For questions ask in this group with the hashtag #AIHack2026, do not DM the admins.",
+      "groupName": "BD Hackathon Community",
+      "url": "https://facebook.com/groups/hackathon/posts/6001",
+      "date": "2026-07-01T08:00:00.000Z"
+    },
+    {
+      "docId": "eval_noise_birthday",
+      "text": "Happy birthday to our beloved group admin! Thank you for keeping this community awesome for five years. Cake emojis in the comments please!",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/9001"
+    },
+    {
+      "docId": "eval_noise_lunch",
+      "text": "Free lunch giveaway at the campus cafeteria this Friday, first 100 students get a burger and a drink. Bring your student ID card.",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/9002"
+    },
+    {
+      "docId": "eval_noise_motivation",
+      "text": "Consistency beats talent. Study a little every single day and in one year you will not recognize yourself. Good morning everyone, have a productive week!",
+      "groupName": "BD CSE Career Community",
+      "url": "https://facebook.com/groups/bdcse/posts/9003"
+    },
+    {
+      "docId": "eval_visa_usa_interview",
+      "text": "US F1 visa interview experience at Dhaka embassy last week: they asked about my funding, my university choice and my plans after graduation. Approved in 3 minutes. Carry your I-20 and bank solvency papers.",
+      "groupName": "Study Abroad BD",
+      "url": "https://facebook.com/groups/studyabroad/posts/2004"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q1_en_direct",
+      "query": "paid remote react internship",
+      "expect": ["eval_intern_react_remote"]
+    },
+    {
+      "id": "q2_bn_to_en",
+      "query": "আমি একটা paid remote internship খুঁজছি react জানি",
+      "expect": ["eval_intern_react_remote", "eval_intern_bn_remote"]
+    },
+    {
+      "id": "q3_en_to_bn",
+      "query": "remote software engineer intern position with salary",
+      "expect": ["eval_intern_bn_remote", "eval_intern_react_remote"]
+    },
+    {
+      "id": "q4_scholarship_semantic",
+      "query": "fully funded masters in Europe for computer science students",
+      "expect": ["eval_scholarship_germany"]
+    },
+    {
+      "id": "q5_scholarship_bn",
+      "query": "জাপানে পড়ার স্কলারশিপ আছে কি",
+      "expect": ["eval_scholarship_japan_bn"]
+    },
+    {
+      "id": "q6_research_paraphrase",
+      "query": "easy final year project topic about detecting network attacks with AI",
+      "expect": ["eval_research_ids_ml"]
+    },
+    {
+      "id": "q7_research_bangla_nlp",
+      "query": "bangla text sentiment thesis dataset",
+      "expect": ["eval_research_nlp_bangla"]
+    },
+    {
+      "id": "q8_coding_error",
+      "query": "mongoose cannot connect to atlas from node app",
+      "expect": ["eval_coding_mongo_atlas"]
+    },
+    {
+      "id": "q9_coding_cors",
+      "query": "react fetch blocked by cors express",
+      "expect": ["eval_coding_react_cors"]
+    },
+    {
+      "id": "q10_rent_bn",
+      "query": "মিরপুরে ব্যাচেলর সাবলেট",
+      "expect": ["eval_rent_mirpur_bn"]
+    },
+    {
+      "id": "q11_rent_en_to_bn_area",
+      "query": "cheap room for students near Dhanmondi with wifi",
+      "expect": ["eval_rent_dhanmondi"]
+    },
+    {
+      "id": "q12_long_post_buried_detail",
+      "query": "when does AI hackathon registration close",
+      "expect": ["eval_long_hackathon_rules"]
+    },
+    {
+      "id": "q13_long_post_prize",
+      "query": "hackathon champion prize money taka",
+      "expect": ["eval_long_hackathon_rules"]
+    },
+    {
+      "id": "q14_visa_experience",
+      "query": "F1 ভিসা ইন্টারভিউতে কী কী জিজ্ঞেস করে",
+      "expect": ["eval_visa_usa_interview"]
+    }
+  ]
+}

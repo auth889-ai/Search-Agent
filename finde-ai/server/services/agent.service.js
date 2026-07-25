@@ -252,6 +252,45 @@ export async function runAgent({
     detail: `${searchResult.count} candidate(s) via ${searchResult.searchMode}`
   });
 
+  // 2a. REFLECT + RETRY (agentic loop, one iteration): if retrieval came back
+  // weak, ask the LLM to reformulate the query from a different angle and
+  // retrieve again, merging the two result sets. This replaces "return junk"
+  // with "try a smarter phrasing" — no LLM key, no retry (search still works).
+  const weakThreshold = 40;
+  const strongCount = searchResult.results.filter((r) => (r.fitScore ?? 0) >= weakThreshold).length;
+  if (llmEnabled() && strongCount < 2) {
+    try {
+      const res = await chat(
+        [
+          {
+            role: "system",
+            content:
+              "You rewrite search queries that returned poor results. Reply with ONLY one alternative search query (same language as the input, different wording/angle, no quotes, no prose)."
+          },
+          { role: "user", content: normalized }
+        ],
+        { temperature: 0.4, maxTokens: 60, timeoutMs: 2500 }
+      );
+      const reformulated = String(res?.text || "").split("\n")[0].trim().slice(0, 200);
+      if (reformulated && reformulated.toLowerCase() !== normalized.toLowerCase()) {
+        const retry = await searchFindE({ query: reformulated, sourceMode, limit: Math.max(limit, 8) });
+        const seen = new Set(searchResult.results.map((r) => r.id));
+        const fresh = retry.results.filter((r) => !seen.has(r.id));
+        searchResult.results = [...searchResult.results, ...fresh].sort(
+          (a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0)
+        );
+        searchResult.count = searchResult.results.length;
+        trace.push({
+          agent: "RetrievalAgent",
+          action: "reflect_retry",
+          detail: `Weak evidence (${strongCount} strong) — retried as "${reformulated}", ${fresh.length} new candidate(s).`
+        });
+      }
+    } catch (error) {
+      trace.push({ agent: "RetrievalAgent", action: "reflect_retry_failed", detail: error.message });
+    }
+  }
+
   // 2b. Optional live web expansion when community evidence is thin.
   let webAdded = 0;
   const strongEnough = searchResult.results.filter((r) => (r.fitScore ?? 0) >= 45);

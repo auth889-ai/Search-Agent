@@ -1,12 +1,109 @@
 # FindE AI — Community + Web Search Agent
 
 A semantic search **agent** that finds the *exact meaning* match (not just keyword
-match) across community posts (Facebook/LinkedIn groups) and the web, ranks every
-result by a **fit score**, and returns a **grounded answer with citations**.
+match) across community posts (Facebook/LinkedIn groups) and the web — in
+**English and Bengali** — ranks every result by a **fit score**, and returns a
+**grounded answer with citations**.
 
 Built as a Chrome extension + Node/Express backend + Elasticsearch, with a
 deterministic multi-agent pipeline (Planner → Router → Retriever → Verifier →
 Composer). No paid API keys required — semantic embeddings run **locally**.
+
+![FindE AI architecture](docs/architecture.png)
+
+---
+
+## 📊 Results (measured, not vibes)
+
+Retrieval quality on the golden eval set (`server/eval/golden.json` — bilingual
+EN/BN queries incl. cross-language, paraphrase, and buried-detail cases), run
+through the **real production pipeline**:
+
+| Pipeline | hit@1 | hit@5 | MRR | recall@10 | nDCG@10 | avg latency |
+|---|---|---|---|---|---|---|
+| Pure local (`--no-llm`, zero API keys) | 93% | **100%** | 0.964 | 100% | 0.978 | **~90ms** |
+| Full (LLM understanding + rerank) | **100%** | 100% | 1.000 | 100% | 1.000 | ~1–2s |
+
+The full pipeline puts the correct post at **rank 1 for every query** —
+including Bengali→English (`q2_bn_to_en`), English→Bengali (`q3_en_to_bn`,
+`q11_rent_en_to_bn_area`) and details buried deep inside long posts (`q12`,
+`q13`). The zero-key local pipeline gets 13/14 at rank 1 (the one miss is a
+cross-language query at rank 2 — exactly the case the LLM translation layer
+exists for) at ~90ms per query.
+
+Reproduce it yourself (Elasticsearch must be running):
+
+```bash
+cd server
+node eval/eval.js --no-llm          # pure local pipeline
+node eval/eval.js                   # with LLM query understanding
+node eval/eval.js --save-baseline   # store as regression baseline
+```
+
+Every later run auto-compares against the saved baseline and exits non-zero on
+regression — run it after **every** ranking change.
+
+### Screenshots
+
+Real captures from the running app (`/app` dashboard):
+
+**Hybrid search** — ranked results with fit ring, meaning/keyword/trust breakdown
+and "why this ranks here":
+
+![Search results](docs/screenshots/search-results.png)
+
+**Agent mode** — grounded LLM answer with inline citations, key points,
+follow-up chips and a full reasoning trace:
+
+![Agent answer](docs/screenshots/agent-answer.png)
+
+> Tip: results pages are now shareable links — `/app/?q=your+query&agent=1`
+> auto-runs the search on load.
+
+---
+
+## How the ranking works
+
+```
+query ──┬─ LLM query understanding (Groq, optional) ──> EN/BN translations + keywords
+        │        runs IN PARALLEL with ↓ (never blocks retrieval)
+        ├─ local embedding (multilingual-e5-small, 384-dim, on-device ONNX)
+        │
+        ├─ wave 1: BM25 + kNN on the original query        (fires immediately)
+        ├─ wave 2: BM25 + kNN per LLM variant (≤4 total)   (cross-language recall)
+        │
+        ├─ weighted RRF fusion (k=60) — chunk hits collapse to parent post,
+        │    best-matching CHUNK is remembered for scoring & snippets
+        ├─ MMR diversification (λ=0.7)
+        ├─ fit score = semantic similarity × fusion rank × trust/freshness nudge
+        └─ cross-encoder rerank (Cohere rerank-v3.5, optional) on EVERY search
+```
+
+Key properties:
+
+- **Dynamic, not hardcoded** — the LLM (not regex rules) detects intent,
+  translates the query both ways, and **decomposes compound questions into
+  sub-queries** that each get their own retrieval leg in the fusion.
+- **Reflect & retry** — if the agent's first retrieval comes back weak, it asks
+  the LLM to reformulate the query from a different angle and retrieves again,
+  merging both result sets (visible in the reasoning trace as `reflect_retry`).
+- **Chunk-aware scoring** — a query matching paragraph 5 of a long post is
+  scored against *that paragraph's* vector and shows *that passage* as the
+  snippet, not the post's opening.
+- **Bilingual BM25** — every text field is indexed three ways: exact
+  (`standard`+asciifolding), `.en` (English analyzer, porter stemming) and
+  `.bn` (built-in Bengali analyzer: indic normalization + Bengali stemmer), so
+  `internships` matches `internship` and Bengali morphology actually tokenizes.
+- **Trust & freshness live in the ranking** (±~10% nudge) — official sources
+  and recent posts win ties; meaning still dominates.
+- **Honest metadata** — web results keep their *real* publish date (or none);
+  unknown dates get neutral freshness instead of pretending to be new.
+- **Graceful degradation everywhere** — no Groq key? no Cohere key? offline?
+  Every stage no-ops safely and search keeps working on the free local stack.
+
+**Semantic engine:** `Xenova/multilingual-e5-small` (100+ languages, 384-dim,
+asymmetric `query:`/`passage:` prefixes) via `@xenova/transformers`, running
+fully on-device — free, offline, deterministic.
 
 ---
 
@@ -16,15 +113,10 @@ Composer). No paid API keys required — semantic embeddings run **locally**.
 |------|-----------|------|
 | 1. UI | Chrome extension (`extension/`) | MV3 popup + content script |
 | 2. Sources | Visible community posts, web search, saved sources | Facebook/LinkedIn (visible-only), Tavily |
-| 3. Ingest | Clean → tag → **embed** → trust signals | `services/ingestion.service.js`, `embedding.service.js` |
-| 4. Search & storage | **Hybrid semantic (kNN) + keyword (BM25)** | Elasticsearch `dense_vector` |
-| 5. Agent team | Plan → retrieve → verify → compose | `services/agent.service.js` |
+| 3. Ingest | Clean → tag → chunk → **embed (batched)** → dedupe/repost-merge → trust signals | `services/ingestion.service.js`, `embedding.service.js` |
+| 4. Search & storage | **Hybrid semantic (kNN) + bilingual BM25 → RRF → MMR → rerank** | Elasticsearch `dense_vector` + `bengali`/`english` analyzers |
+| 5. Agent team | Plan → retrieve → web-expand → verify → compose | `services/agent.service.js` |
 | 6. Output | Fit score, why-relevant, citations, next actions | JSON API + popup cards |
-
-**Semantic engine:** `all-MiniLM-L6-v2` (384-dim) via `@xenova/transformers`,
-running fully on-device — free, offline, deterministic. Cosine similarity in
-Elasticsearch gives the *meaning* score; BM25 gives the *keyword* score; the two
-are blended into the **fit score** (`0.7·semantic + 0.3·keyword`).
 
 ---
 
@@ -37,16 +129,21 @@ npm run install:all       # or: npm install
 # 1. start Elasticsearch (Docker Desktop must be running)
 npm run elastic:up
 
-# 2. create indices (with the dense_vector field) and seed demo data
+# 2. create indices (dense_vector + bilingual analyzers) and seed demo data
 npm run create-indices
-npm run seed              # first run downloads the ~90MB embedding model once
+npm run seed              # first run downloads the ~120MB embedding model once
 
 # 3. run the backend
 npm --prefix server start   # http://localhost:8080
 
-# 4. test end-to-end
+# 4. test + evaluate
 npm --prefix server test
+node server/eval/eval.js --no-llm
 ```
+
+> Upgrading an existing install? Recreate the indices (or add the `.bn`/`.en`
+> subfields) and re-run `elastic/scripts/reembed.js` to activate the bilingual
+> mapping on old data.
 
 ### Load the Chrome extension
 1. Open `chrome://extensions`
@@ -63,8 +160,9 @@ npm --prefix server test
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET  | `/api/health` | status + capabilities |
-| POST | `/api/search` | hybrid semantic+keyword search with fit scores |
+| POST | `/api/search` | hybrid search with fit scores + optional rerank |
 | POST | `/api/agent/ask` | full agent pipeline → grounded answer + citations + trace |
+| POST | `/api/match` | LLM-judge match of live-captured posts |
 | POST | `/api/posts/index` | index visible community posts (bulk) |
 | POST | `/api/web/search` | live web search (Tavily) + cache |
 
@@ -77,16 +175,30 @@ curl -X POST http://localhost:8080/api/agent/ask \
 
 ---
 
+## Roadmap (researched, prioritized)
+
+1. **Grow the golden set to 100+ queries** via LLM-judge labeling with pooled
+   candidates (BM25-only / dense-only / hybrid), human spot-check ~50 labels.
+2. **Local cross-encoder fallback** — `onnx-community/bge-reranker-v2-m3-ONNX`
+   (Apache-2.0, Bengali-capable, q8) reranking top 10–15 when no Cohere key.
+3. **Embedding upgrade** — `EmbeddingGemma-300m` @ 512-dim (Matryoshka),
+   validated against the eval baseline before reindexing.
+4. **SSE streaming** so answers render token-by-token instead of one blob.
+5. **Native ES retrievers** — server-side RRF (`rrf` retriever) once on ES ≥8.16
+   (current compose file pins 8.15.3).
+
 ## Safety
 
 - Indexes **only posts already visible** on screen when the user clicks.
 - **No** auto-scroll, **no** hidden/private content, **no** login bypass, **no**
-  background scraping. Flags in `.env` (`ALLOW_*`) enforce this.
+  background scraping. Flags in `.env` (`ALLOW_*`) enforce this server-side.
 
 ## Configuration (`.env`)
 
-Copy `.env.example` → `.env`. Keys are optional:
-- `TAVILY_API_KEY` — enables live web search (otherwise community/saved only).
-- Semantic search needs **no key** (local model).
+Copy `.env.example` → `.env`. All keys are optional:
+- `GROQ_API_KEY` — LLM query understanding (cross-language variants) + answers.
+- `COHERE_API_KEY` — cross-encoder reranking on every search.
+- `TAVILY_API_KEY` — live web search (otherwise community/saved only).
+- Semantic search itself needs **no key** (local model).
 
 > ⚠️ Never commit `.env` (it is git-ignored). Rotate any key that has been shared.

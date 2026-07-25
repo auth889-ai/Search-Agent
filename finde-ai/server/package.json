@@ -9,6 +9,8 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "test": "node --test test/*.test.js",
+    "eval": "node eval/eval.js",
+    "eval:local": "node eval/eval.js --no-llm",
     "agent:demo": "curl http://localhost:8080/api/agent/demo",
     "agent:ask": "curl -X POST http://localhost:8080/api/agent/ask -H 'Content-Type: application/json' -d '{\"query\":\"beginner AI cybersecurity research idea\",\"sourceMode\":\"all\",\"limit\":5}'",
     "health": "curl http://localhost:8080/api/health",

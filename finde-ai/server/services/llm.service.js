@@ -44,12 +44,17 @@ export function llmInfo() {
 /**
  * Run a chat completion. Returns { text, provider, model } or null.
  */
-export async function chat(messages, { temperature = 0.2, maxTokens = 600 } = {}) {
+export async function chat(
+  messages,
+  { temperature = 0.2, maxTokens = 600, timeoutMs: timeoutOverride } = {}
+) {
   const p = activeProvider();
   if (!p) return null;
 
   const model = process.env[p.modelEnv] || p.defaultModel;
-  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 12000);
+  const timeoutMs = Number(
+    timeoutOverride || process.env.LLM_TIMEOUT_MS || 12000
+  );
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

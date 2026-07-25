@@ -1,6 +1,7 @@
 import { Client } from "@elastic/elasticsearch";
-import { cosineSimilarity } from "./embedding.service.js";
+import { cosineSimilarity, normalizeSimilarity } from "./embedding.service.js";
 import { advancedRetrieve } from "./retrieval.service.js";
+import { rerankResults, rerankerEnabled } from "./rerank.service.js";
 
 const ELASTICSEARCH_NODE = process.env.ELASTICSEARCH_NODE || "http://localhost:9200";
 const COMMUNITY_POSTS_INDEX = process.env.COMMUNITY_POSTS_INDEX || "finde_community_posts";
@@ -380,13 +381,29 @@ function mapCandidate(cand, context) {
   const { queryVector, rrfMin = 0, rrfMax = 0, rankCap = 20 } = context;
 
   const embedding = source.embedding;
-  const sem =
+  // Semantic fit = the BEST of (parent vector, best-matching chunk vector).
+  // A long post's parent embedding only covers its opening, so a query that
+  // matched chunk 5 must be scored against chunk 5 — otherwise buried details
+  // (prizes, deadlines deep in a post) get under-ranked.
+  const parentSim =
     queryVector && Array.isArray(embedding)
-      ? Math.max(0, Math.min(1, cosineSimilarity(queryVector, embedding)))
-      : typeof cand.relevance === "number"
-      ? Math.max(0, cand.relevance)
+      ? cosineSimilarity(queryVector, embedding)
       : null;
+  const chunkSim =
+    queryVector && Array.isArray(cand.bestChunk?.embedding)
+      ? cosineSimilarity(queryVector, cand.bestChunk.embedding)
+      : null;
+  const rawSim =
+    parentSim != null || chunkSim != null
+      ? Math.max(parentSim ?? -Infinity, chunkSim ?? -Infinity)
+      : typeof cand.relevance === "number"
+      ? cand.relevance
+      : null;
+  // normalizeSimilarity rescales model-specific cosine ranges (E5 compresses
+  // everything into ~0.7-0.95) into a meaningful 0..1 fit.
+  const sem = rawSim != null ? normalizeSimilarity(rawSim) : null;
   const semanticFit = sem != null ? Math.round(sem * 100) : null;
+  const matchedInChunk = chunkSim != null && (parentSim == null || chunkSim > parentSim);
 
   // Lexical strength from best BM25 rank (rank-based, no fragile score norm).
   const keywordFit =
@@ -399,12 +416,20 @@ function mapCandidate(cand, context) {
   // Anchor fit on ABSOLUTE semantic similarity (this is a meaning search), then
   // let fusion rank modulate it +/-30%. This way a weak-meaning doc stays low
   // even if it is the best of a bad set (min-max rank would otherwise inflate it).
-  const fitScore =
+  const baseFit =
     sem != null
-      ? Math.round(100 * sem * (0.7 + 0.3 * rrfNorm))
-      : Math.round(55 * rrfNorm);
+      ? 100 * sem * (0.7 + 0.3 * rrfNorm)
+      : 55 * rrfNorm;
 
-  const confidence = computeConfidence(0, source);
+  // Trust + freshness nudge the final ordering (±~10%), meaning still dominates.
+  // Neutral values (trust 0.5, freshness 0.6) leave the score unchanged.
+  const ts = source.trustSignals || {};
+  const trust = Number.isFinite(Number(ts.trustScore)) ? Number(ts.trustScore) : 0.5;
+  const fresh = Number.isFinite(Number(ts.freshnessScore)) ? Number(ts.freshnessScore) : 0.6;
+  const signalFactor = 1 + 0.12 * (trust - 0.5) + 0.08 * (fresh - 0.6);
+  const fitScore = Math.max(0, Math.min(100, Math.round(baseFit * signalFactor)));
+
+  const confidence = computeConfidence(sem ?? 0, source);
   // Only claim a "semantic" match when the cosine similarity is actually decent;
   // kNN always returns k docs, so mere presence isn't a real meaning match.
   const MIN_SEMANTIC = 0.3;
@@ -425,7 +450,10 @@ function mapCandidate(cand, context) {
     matchedBy
   });
 
-  const rawSnippet = source.snippet || (source.text || "").slice(0, 260);
+  // When the match lives in a deep chunk, show THAT passage, not the opening.
+  const chunkText = matchedInChunk ? String(cand.bestChunk?.text || "").trim() : "";
+  const rawSnippet =
+    chunkText.slice(0, 260) || source.snippet || (source.text || "").slice(0, 260);
   const highlightedSnippet = highlightTerms(rawSnippet, terms);
 
   return {
@@ -568,6 +596,10 @@ export async function searchFindE({
     intent
   });
 
+  // The LLM's intent (from real language understanding) beats the regex
+  // keyword rules whenever it is available.
+  const finalIntent = plan.llmIntent || intent;
+
   const context = {
     queryVector,
     queryTerms: queryTerms(normalizedQuery),
@@ -576,16 +608,36 @@ export async function searchFindE({
     rankCap: safeLimit * 2
   };
 
-  const results = candidates
+  let results = candidates
     .map((cand) => mapCandidate(cand, context))
     .sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
+
+  // Final precision pass: cross-encoder rerank of the shortlist (no-op without
+  // COHERE_API_KEY). Blend so the reranker orders but semantic fit still anchors.
+  let rerankUsed = false;
+  if (rerankerEnabled() && results.length > 1) {
+    const { reranked, used } = await rerankResults(normalizedQuery, results);
+    if (used) {
+      rerankUsed = true;
+      // Even blend: the cross-encoder sharpens ordering but must not overrule
+      // a strong bilingual semantic match (rerank models are weaker on
+      // cross-language pairs than the multilingual embedder is).
+      results = reranked
+        .map((r) => ({
+          ...r,
+          fitScore: Math.round(0.5 * (r.rerankScore ?? r.fitScore) + 0.5 * r.fitScore)
+        }))
+        .sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
+    }
+  }
+
   const grouped = groupResults(results);
   const searchMode = queryVector ? "advanced_rrf_mmr" : "keyword_rrf";
 
   return {
     ok: true,
     query: normalizedQuery,
-    intent,
+    intent: finalIntent,
     sourceMode,
     searchMode,
     total: results.length,
@@ -594,7 +646,7 @@ export async function searchFindE({
       indexes,
       searchMode,
       retrieval: plan,
-      intentBoosts: getIntentBoosts(intent),
+      rerankUsed,
       filters: {
         topics,
         location,
@@ -606,7 +658,7 @@ export async function searchFindE({
     },
     answerDraft: buildAnswerDraft({
       query: normalizedQuery,
-      intent,
+      intent: finalIntent,
       results
     }),
     grouped,

@@ -236,3 +236,17 @@ $("content").addEventListener("click", (e) => {
 
 loadStatus();
 $("queryInput").focus();
+
+// Shareable links: /app/?q=...&agent=1&web=1&source=community auto-runs the
+// search on load, so results can be linked, bookmarked, or screenshotted.
+const bootParams = new URLSearchParams(location.search);
+const bootQuery = (bootParams.get("q") || "").trim();
+if (bootQuery) {
+  $("queryInput").value = bootQuery;
+  if (bootParams.has("agent")) $("agentMode").checked = bootParams.get("agent") === "1";
+  if (bootParams.has("web")) $("webMode").checked = bootParams.get("web") === "1";
+  const bootSource = bootParams.get("source");
+  const bootItem = bootSource && document.querySelector(`.source-item[data-source="${bootSource}"]`);
+  if (bootItem) bootItem.click();
+  run();
+}
