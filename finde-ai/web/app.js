@@ -98,7 +98,7 @@ function resultCard(r, i) {
               <span class="pill">trust ${r.confidence ?? 0}%</span>
               ${r.rerankScore != null ? `<span class="pill rerank">rerank ${r.rerankScore}%</span>` : ""}
             </div>
-            ${r.url ? `<a class="open-link" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>` : ""}
+            ${r.url ? `<a class="open-link" href="${esc(r.url)}" target="_blank" rel="noopener" data-doc="${esc(r.id)}" data-docindex="${esc(r.index || "")}" data-pos="${i + 1}" data-fit="${fit}">Open ↗</a>` : ""}
           </div>
           <details class="why-detail">
             <summary>Why this result ranks here</summary>
@@ -232,6 +232,25 @@ $("content").addEventListener("click", (e) => {
   $("queryInput").value = chip.dataset.q;
   $("content").scrollTo({ top: 0, behavior: "smooth" });
   run();
+});
+
+// Interaction logging (the data flywheel): every result open is recorded and
+// feeds personalization + future learning-to-rank. Fire-and-forget.
+$("content").addEventListener("click", (e) => {
+  const link = e.target.closest(".open-link[data-doc]");
+  if (!link) return;
+  fetch(`${API}/api/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "click",
+      docId: link.dataset.doc,
+      docIndex: link.dataset.docindex,
+      query: $("queryInput").value.trim(),
+      position: Number(link.dataset.pos),
+      fitScore: Number(link.dataset.fit)
+    })
+  }).catch(() => {});
 });
 
 loadStatus();

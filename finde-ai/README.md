@@ -5,6 +5,12 @@ match) across community posts (Facebook/LinkedIn groups) and the web — in
 **English and Bengali** — ranks every result by a **fit score**, and returns a
 **grounded answer with citations**.
 
+**Positioning:** Facebook's own group search is per-group, English-optimized and
+engagement-ranked. FindE is the opposite — *your* cross-group corpus, bilingual
+bn+en retrieval, answer-my-question ranking, deadline-aware. It's not a search
+box; it's a **personal opportunity radar** for the Bangladeshi student community,
+and (as of 2026) no shipped product occupies this niche.
+
 Built as a Chrome extension + Node/Express backend + Elasticsearch, with a
 deterministic multi-agent pipeline (Planner → Router → Retriever → Verifier →
 Composer). No paid API keys required — semantic embeddings run **locally**.
@@ -100,6 +106,16 @@ Key properties:
   unknown dates get neutral freshness instead of pretending to be new.
 - **Graceful degradation everywhere** — no Groq key? no Cohere key? offline?
   Every stage no-ops safely and search keeps working on the free local stack.
+- **Data flywheel** — every result click/save is logged (`POST /api/feedback`,
+  its own ES index) and feeds a **personal profile vector** (weighted centroid
+  of what you clicked/saved) that nudges ranking toward your demonstrated
+  interests (capped ±4%; relevance always dominates). The same log becomes the
+  training set for learning-to-rank (native in Elasticsearch since 8.13) once
+  enough interactions accumulate.
+- **Opportunity radar** — `GET /api/digest` returns everything in your corpus
+  with a deadline in the next N days, urgency-tagged (`critical`/`soon`/
+  `upcoming`), soonest first. Search answers what you ask; the digest surfaces
+  what you'd regret missing without asking.
 
 **Semantic engine:** `Xenova/multilingual-e5-small` (100+ languages, 384-dim,
 asymmetric `query:`/`passage:` prefixes) via `@xenova/transformers`, running

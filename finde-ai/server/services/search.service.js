@@ -2,6 +2,7 @@ import { Client } from "@elastic/elasticsearch";
 import { cosineSimilarity, normalizeSimilarity } from "./embedding.service.js";
 import { advancedRetrieve } from "./retrieval.service.js";
 import { rerankResults, rerankerEnabled } from "./rerank.service.js";
+import { getProfileVector, personalAffinity } from "./feedback.service.js";
 
 const ELASTICSEARCH_NODE = process.env.ELASTICSEARCH_NODE || "http://localhost:9200";
 const COMMUNITY_POSTS_INDEX = process.env.COMMUNITY_POSTS_INDEX || "finde_community_posts";
@@ -612,6 +613,25 @@ export async function searchFindE({
     .map((cand) => mapCandidate(cand, context))
     .sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
 
+  // Personalization: nudge results toward the user's demonstrated taste
+  // (centroid of clicked/saved docs). Capped at ±4% — it breaks ties between
+  // comparable results, it never overrules relevance. No history => no-op.
+  let personalized = false;
+  const profile = await getProfileVector().catch(() => null);
+  if (profile) {
+    const embById = new Map(candidates.map((c) => [c.id, c.source?.embedding]));
+    results.forEach((r) => {
+      const affinity = personalAffinity(profile, embById.get(r.id));
+      if (affinity != null) {
+        r.fitScore = Math.max(0, Math.min(100, Math.round(r.fitScore * (1 + 0.08 * (affinity - 0.5)))));
+        personalized = true;
+      }
+    });
+    if (personalized) {
+      results.sort((a, b) => b.fitScore - a.fitScore || b.confidence - a.confidence);
+    }
+  }
+
   // Final precision pass: cross-encoder rerank of the shortlist (no-op without
   // COHERE_API_KEY). Blend so the reranker orders but semantic fit still anchors.
   let rerankUsed = false;
@@ -647,6 +667,7 @@ export async function searchFindE({
       searchMode,
       retrieval: plan,
       rerankUsed,
+      personalized,
       filters: {
         topics,
         location,
