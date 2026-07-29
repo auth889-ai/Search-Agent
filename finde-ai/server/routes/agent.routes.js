@@ -1,7 +1,18 @@
 import express from "express";
 import { runAgent } from "../services/agent.service.js";
+import { mcpEnabled, mcpListTools } from "../services/elasticMcp.service.js";
 
 const router = express.Router();
+
+// Partner-integration proof: list the live tools of the official Elastic MCP
+// server the agent talks to (list_indices, get_mappings, search, get_shards).
+router.get("/mcp/tools", async (_req, res) => {
+  if (!mcpEnabled()) {
+    return res.json({ ok: false, enabled: false, message: "Set ELASTIC_MCP_ENABLED=true" });
+  }
+  const tools = await mcpListTools();
+  res.json({ ok: Boolean(tools), enabled: true, server: "@elastic/mcp-server-elasticsearch", tools: tools || [] });
+});
 
 // Full agent pipeline: plan -> retrieve -> verify -> compose grounded answer.
 router.post("/agent/ask", async (req, res) => {

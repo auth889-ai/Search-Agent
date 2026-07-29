@@ -15,6 +15,7 @@ import { searchFindE } from "./search.service.js";
 import { searchWebWithProvider } from "./webProviders.service.js";
 import { rerankResults, rerankerEnabled } from "./rerank.service.js";
 import { chat, llmEnabled } from "./llm.service.js";
+import { mcpEnabled, mcpSearch } from "./elasticMcp.service.js";
 
 const STOPWORDS = new Set([
   "the", "a", "an", "for", "and", "or", "to", "of", "in", "on", "with", "how",
@@ -373,6 +374,29 @@ export async function runAgent({
     }
   }
 
+  // 3c. ELASTIC MCP EVIDENCE CHECK (partner integration): re-verify the top
+  // result THROUGH Elastic's official MCP server — the agent proves its best
+  // evidence really exists in the index via a partner tool call, and the
+  // trace records the MCP tool used.
+  let mcpUsed = false;
+  if (mcpEnabled() && ranked[0]?.id) {
+    const top = ranked[0];
+    const mcpRes = await mcpSearch(
+      top.index || "finde_*",
+      { _source: ["docId", "title"], query: { term: { docId: top.id } } },
+      { size: 1 }
+    );
+    if (mcpRes) {
+      mcpUsed = true;
+      const found = /Total results:\s*[1-9]/i.test(mcpRes.raw) || (Array.isArray(mcpRes.hits) && mcpRes.hits.length > 0);
+      trace.push({
+        agent: "EvidenceVerifier",
+        action: "elastic_mcp_verify",
+        detail: `Called Elastic MCP tool "${mcpRes.toolName}" on ${top.index}: top evidence "${(top.title || "").slice(0, 60)}" ${found ? "confirmed in index" : "NOT found (flagged)"}.`
+      });
+    }
+  }
+
   const topFit = ranked[0]?.fitScore ?? 0;
   const topSem = ranked[0]?.semanticFit ?? 0;
   // Trust the cross-encoder when present; otherwise also require a real semantic
@@ -430,6 +454,7 @@ export async function runAgent({
     results: ranked,
     webAdded,
     neuralRerank,
+    mcpUsed,
     trace,
     tookMs: Date.now() - t0
   };
