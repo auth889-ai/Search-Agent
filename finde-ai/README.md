@@ -153,6 +153,7 @@ npm run seed              # first run downloads the ~120MB embedding model once
 npm --prefix server start   # http://localhost:8080
 
 # 4. test + evaluate
+npm test                  # extension: extraction core + FB/LinkedIn adapters (jsdom)
 npm --prefix server test
 node server/eval/eval.js --no-llm
 ```
@@ -167,7 +168,32 @@ node server/eval/eval.js --no-llm
 3. **Load unpacked** → select the `extension/` folder
 4. Make sure the backend is running (`http://localhost:8080`)
 5. Click the FindE AI icon → **Search**, or open a Facebook/LinkedIn group and
-   use **Index posts** to add the visible posts to your searchable memory.
+   use **Read visible posts** to add the visible posts to your searchable memory.
+6. For bulk collection, hit **Start live capture** and just scroll — every post
+   that crosses your screen is extracted, deduped and indexed in the background.
+
+#### Platform extraction
+
+Facebook and LinkedIn ship completely different markup, so each has its own
+adapter in `extension/platforms.js` behind one shared interface; `content.js`
+stays platform-blind and `extract-core.js` holds the pure text filtering.
+
+| | Facebook | LinkedIn |
+|---|---|---|
+| Post container | `[role="article"]` (outermost) | `[data-urn*="urn:li:activity"]`, `.feed-shared-update-v2` |
+| Body | many `div[dir="auto"]` leaf blocks, joined in reading order | `.update-components-text` |
+| Comments excluded | nested `[role="article"]` | `.comments-comment-*` entities |
+| Identity | story/permalink URL | `urn:li:activity` / `urn:li:ugcPost` URN |
+| Quirk handled | obfuscated classes, alt-text runs | every label rendered twice (visually-hidden + aria-hidden) |
+
+Both sites rewrite their DOM often, so every lookup is a layered fallback
+(exact class → class-substring → structural guess): a rename degrades one field
+instead of returning zero posts. Post identity is the permalink when available
+and text only as a fallback, so two different posts with identical wording are
+never collapsed into one.
+
+`npm test` runs these adapters against jsdom fixtures shaped like the real
+markup, including the comment-pollution and duplicate-label cases.
 
 ---
 

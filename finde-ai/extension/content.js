@@ -9,13 +9,11 @@
  *     posts instead of one screenful.
  *
  * SAFETY: only reads posts already rendered and visible to the user. No
- * auto-scroll, no expanding hidden content, no login bypass, no background
- * work without the user switching live capture on.
+ * auto-scroll, no expanding hidden content, no clicking "see more", no login
+ * bypass, no background work without the user switching live capture on.
  *
- * Facebook's DOM is heavily obfuscated: raw innerText of a post pulls in image
- * alt text ("Facebook" repeated), reaction blobs, and random class-like tokens.
- * So we target the real message containers (div[dir=auto]) and filter noise via
- * the pure helpers in extract-core.js (loaded first).
+ * All DOM knowledge lives in platforms.js (Facebook + LinkedIn adapters) and
+ * all text filtering in extract-core.js; this file only orchestrates.
  */
 
 (() => {
@@ -25,122 +23,51 @@
   globalThis.__FINDE_CONTENT_ACTIVE__ = true;
 
   const MAX_POSTS = 60;
-  const { cleanText, looksLikeRealText, stripTrailingUi, UI_NOISE, parsePostTimestamp } =
-    globalThis.FindEExtract;
+  const { cleanText, dedupeKey, deriveGroupName } = globalThis.FindEExtract;
+  const { detect } = globalThis.FindEPlatforms;
 
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return false;
     const style = window.getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden") return false;
-    return rect.bottom > 0 && rect.top < window.innerHeight + rect.height;
-  }
-
-  const MAX_POST_CHARS = 6000;
-
-  // Extract the post message from a Facebook article by reading dir="auto" blocks.
-  function extractMessage(article) {
-    const blocks = Array.from(article.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
-    const seen = new Set();
-    const candidates = [];
-
-    for (const b of blocks) {
-      // Skip container blocks that wrap other dir=auto blocks (avoids duplicates).
-      if (b.querySelector('div[dir="auto"], span[dir="auto"]')) continue;
-      // Skip text living inside a NESTED article (comments render as articles
-      // inside the post article) — otherwise comment text pollutes the post.
-      if (b.closest('[role="article"]') !== article) continue;
-
-      const t = stripTrailingUi(b.innerText || b.textContent);
-      if (!looksLikeRealText(t)) continue;
-
-      const key = t.slice(0, 80).toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      candidates.push(t);
-    }
-
-    if (!candidates.length) return "";
-    // Keep ALL genuine paragraphs in reading order — multi-paragraph posts
-    // (requirements, deadlines, contact info) used to lose everything except
-    // their single longest block, which crippled search quality.
-    return candidates.join("\n").slice(0, MAX_POST_CHARS);
-  }
-
-  function extractAuthor(article) {
-    const el = article.querySelector('h2 a, h3 a, h4 a, strong a, a[role="link"] strong');
-    const name = cleanText(el?.textContent || "");
-    return name && name.length <= 60 && !UI_NOISE.test(name) ? name : "";
-  }
-
-  // Best-effort real post date. Sources in order of reliability:
-  // <time datetime>, <abbr data-utime> (epoch), then short timestamp labels
-  // ("2d", "5 hrs", "Yesterday", "June 5", "২ দিন") on links near the header.
-  function findPostDate(article) {
-    const timeEl = article.querySelector("time[datetime]");
-    if (timeEl) {
-      const parsed = new Date(timeEl.getAttribute("datetime"));
-      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-    }
-
-    const abbr = article.querySelector("abbr[data-utime]");
-    if (abbr) {
-      const epoch = Number(abbr.getAttribute("data-utime"));
-      if (epoch > 0) return new Date(epoch * 1000).toISOString();
-    }
-
-    const links = Array.from(article.querySelectorAll('a[role="link"], a[href]')).slice(0, 30);
-    for (const link of links) {
-      const label = cleanText(link.getAttribute("aria-label") || link.innerText || "");
-      if (!label || label.length > 40) continue;
-      const parsed = parsePostTimestamp(label, Date.now());
-      if (parsed) return parsed;
-    }
-
-    return "";
-  }
-
-  function findPermalink(article) {
-    const links = article.querySelectorAll(
-      'a[href*="/posts/"], a[href*="/permalink/"], a[href*="/groups/"], a[href*="story_fbid"], a[href*="/feed/update/"]'
-    );
-    for (const link of links) {
-      const href = link.href || "";
-      if (href && !href.includes("#")) return href.split("?")[0];
-    }
-    return "";
+    // Intersects the viewport at all — the user has this post on screen.
+    return rect.bottom > 0 && rect.top < window.innerHeight;
   }
 
   function extractVisiblePosts() {
-    const articles = Array.from(document.querySelectorAll('[role="article"]'));
+    const adapter = detect(location.hostname);
+    if (!adapter) return [];
+
     const seen = new Set();
     const posts = [];
     const pageUrl = location.href;
-    const platform = location.hostname.includes("linkedin") ? "linkedin" : "facebook";
-    const groupName = cleanText(document.title).replace(/\s*[|·].*$/i, "") || "Community";
+    const groupName = deriveGroupName(document.title);
 
-    for (const article of articles) {
+    for (const container of adapter.postContainers()) {
       if (posts.length >= MAX_POSTS) break;
-      // Comments render as articles nested inside the post article — skip them.
-      if (article.parentElement?.closest('[role="article"]')) continue;
-      if (!isVisible(article)) continue;
+      if (adapter.isNested(container)) continue;
+      if (!isVisible(container)) continue;
 
-      const text = extractMessage(article);
+      const text = adapter.message(container);
       if (!text) continue;
 
-      const key = text.slice(0, 120).toLowerCase();
+      const url = adapter.permalink(container);
+      const date = adapter.date(container);
+
+      // Identity is the permalink when the platform gives one, text otherwise.
+      const key = dedupeKey({ url, text });
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const date = findPostDate(article);
       posts.push({
         text,
-        authorDisplay: extractAuthor(article),
-        url: findPermalink(article),
+        authorDisplay: adapter.author(container),
+        url,
         ...(date ? { date, dateSource: "post_timestamp" } : {}),
         pageUrl,
         groupName,
-        platform,
+        platform: adapter.name,
         captureMode: "user_clicked_visible_posts",
         capturedBy: "finde_chrome_extension"
       });
@@ -149,11 +76,24 @@
     return posts;
   }
 
+  // Diagnostics for the popup's empty state: distinguishes "no post containers
+  // on this page" (wrong page / selectors stale) from "containers but no text".
+  function extractionStats() {
+    const adapter = detect(location.hostname);
+    if (!adapter) return { platform: "unsupported", containers: 0, visible: 0 };
+    const containers = adapter.postContainers().filter((el) => !adapter.isNested(el));
+    return {
+      platform: adapter.name,
+      containers: containers.length,
+      visible: containers.filter(isVisible).length
+    };
+  }
+
   /* ---------------- live capture (user-initiated, user-scrolled) ---------------- */
 
   const live = {
     on: false,
-    seen: new Set(), // content keys already sent this session
+    seen: new Set(), // post identities already sent this session
     buffer: [],
     captured: 0,
     scanTimer: null,
@@ -176,7 +116,7 @@
   function liveScan() {
     if (!live.on) return;
     for (const post of extractVisiblePosts()) {
-      const key = post.text.slice(0, 120).toLowerCase();
+      const key = dedupeKey(post);
       if (live.seen.has(key)) continue;
       live.seen.add(key);
       live.buffer.push(post);
@@ -188,7 +128,7 @@
     }
   }
 
-  // Throttle: Facebook mutates the DOM constantly; scan at most ~once/second.
+  // Throttle: both feeds mutate the DOM constantly; scan at most ~once/second.
   function scheduleLiveScan() {
     if (!live.on || live.scanTimer) return;
     live.scanTimer = setTimeout(() => {
@@ -226,11 +166,11 @@
     try {
       switch (message?.type) {
         case "FINDE_PING":
-          sendResponse({ ok: true });
+          sendResponse({ ok: true, platform: detect(location.hostname)?.name || null });
           break;
         case "FINDE_EXTRACT_POSTS": {
           const posts = extractVisiblePosts();
-          sendResponse({ ok: true, posts, count: posts.length });
+          sendResponse({ ok: true, posts, count: posts.length, stats: extractionStats() });
           break;
         }
         case "FINDE_LIVE_START":

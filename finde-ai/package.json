@@ -4,7 +4,9 @@
   "private": true,
   "description": "FindE AI - AI Community + Web Search Agent using Chrome Extension, Elasticsearch, Elastic MCP, and Gemini.",
   "license": "MIT",
+  "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "npm --prefix server run dev",
     "dev:web": "npm --prefix web run dev",
@@ -23,7 +25,8 @@
     "elastic"
   ],
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "jsdom": "^29.1.1"
   },
   "engines": {
     "node": ">=20.0.0"

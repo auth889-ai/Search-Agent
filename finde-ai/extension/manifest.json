@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FindE AI — Community + Web Search Agent",
-  "version": "0.1.0",
-  "description": "Semantic fit-score search over community posts + web. Reads only the posts visible on your screen. No hidden scraping, no login bypass.",
+  "version": "0.2.0",
+  "description": "Semantic fit-score search over Facebook & LinkedIn posts + web. Reads only the posts visible on your screen. No hidden scraping, no login bypass.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "http://localhost:8080/*",
@@ -27,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["https://*.facebook.com/*", "https://*.linkedin.com/*"],
-      "js": ["extract-core.js", "content.js"],
+      "js": ["extract-core.js", "platforms.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
